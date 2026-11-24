@@ -1,27 +1,39 @@
-// High-fidelity instant PDF text extractor using pure-JS fflate stream decompression
-// and 2D spatial coordinate grouping with main-thread PDF.js fallback
+// High-fidelity instant PDF text extractor using PDF.js with font CMap/ToUnicode decoding
+// and pure-JS fflate stream decompression fallback
 
 import * as fflate from 'fflate';
 
-export async function extractTextFromPdf(arrayBuffer: ArrayBuffer): Promise<string> {
-  // Method 1: Instant pure-JS PDF stream scanner with 2D spatial coordinate grouping
-  // Takes <5ms, requires 0 network requests, 0 external workers, and never hangs
-  try {
-    const nativeText = nativeExtractPdfStreams(arrayBuffer);
-    if (nativeText && nativeText.trim().length > 20) {
-      return nativeText.trim();
+async function getPdfJs(): Promise<any> {
+  if (typeof window === 'undefined') return null;
+  const win = window as any;
+  if (win.pdfjsLib) {
+    if (win.pdfjsLib.GlobalWorkerOptions && !win.pdfjsLib.GlobalWorkerOptions.workerSrc) {
+      win.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     }
-  } catch (err) {
-    console.warn('Fast stream decompression error, falling back:', err);
+    return win.pdfjsLib;
   }
+  // Wait up to 1.5s in case script tag is still resolving
+  for (let i = 0; i < 15; i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    if (win.pdfjsLib) {
+      if (win.pdfjsLib.GlobalWorkerOptions && !win.pdfjsLib.GlobalWorkerOptions.workerSrc) {
+        win.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      }
+      return win.pdfjsLib;
+    }
+  }
+  return null;
+}
 
-  // Method 2: Main-thread PDF.js fallback with strict 2-second timeout
-  if (typeof window !== 'undefined' && (window as any).pdfjsLib) {
+export async function extractTextFromPdf(arrayBuffer: ArrayBuffer): Promise<string> {
+  // Method 1: High-fidelity PDF.js text extraction (decodes font CMaps, ToUnicode, layout)
+  const pdfjs = await getPdfJs();
+  if (pdfjs) {
     try {
-      const pdfjs = (window as any).pdfjsLib;
       const loadingTask = pdfjs.getDocument({
         data: new Uint8Array(arrayBuffer),
-        disableWorker: true,
         isEvalSupported: false,
       });
 
@@ -58,16 +70,65 @@ export async function extractTextFromPdf(arrayBuffer: ArrayBuffer): Promise<stri
         fullText += pageStr + '\n\n';
       }
 
-      if (fullText.trim().length > 10) {
-        return fullText.trim();
+      if (fullText.trim().length > 10 && isValidExtractedText(fullText)) {
+        return sanitizeExtractedText(fullText.trim());
       }
     } catch (err) {
       console.warn('PDF.js text extraction failed:', err);
     }
   }
 
-  // Method 3: Direct ASCII string search in binary
-  return extractAsciiStringsFromBuffer(arrayBuffer);
+  // Method 2: Instant pure-JS PDF stream scanner with 2D spatial coordinate grouping
+  try {
+    const nativeText = nativeExtractPdfStreams(arrayBuffer);
+    if (nativeText && nativeText.trim().length > 20 && isValidExtractedText(nativeText)) {
+      return sanitizeExtractedText(nativeText.trim());
+    }
+  } catch (err) {
+    console.warn('Fast stream decompression error, falling back:', err);
+  }
+
+  // Method 3: Direct ASCII string search in binary (clean text only, strictly no PDF bytecode)
+  const asciiText = extractAsciiStringsFromBuffer(arrayBuffer);
+  if (asciiText && isValidExtractedText(asciiText)) {
+    return sanitizeExtractedText(asciiText);
+  }
+
+  return '';
+}
+
+function isValidExtractedText(text: string): boolean {
+  if (!text || text.trim().length < 15) return false;
+
+  // Reject text dominated by raw PDF operators
+  const pdfOperatorMatches = text.match(/\b(?:BT|ET|Tf|Tm|rg|RG|re|cm|Td|TD)\b/g);
+  if (pdfOperatorMatches && pdfOperatorMatches.length > 5) {
+    const ratio = (pdfOperatorMatches.length * 4) / text.length;
+    if (ratio > 0.15) return false;
+  }
+
+  // Check if text looks like Caesar-shifted / font-encoded ciphertext (e.g. 1RWHV %DODQFH)
+  // Valid invoice text almost always has common invoice terms or readable words
+  const invoiceKeywords =
+    /(?:invoice|bill|tax|total|amount|subtotal|sub\s*total|gst|gstin|date|rate|qty|bag|kg|item|description|balance|due|rupee|payment|hsn|sac|cgst|sgst|igst|tools|supply|party|customer|buyer|vendor|supplier)/i;
+  
+  return invoiceKeywords.test(text);
+}
+
+function sanitizeExtractedText(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => {
+      const trimmed = line.trim();
+      // Drop lines that are purely PDF bytecode
+      if (/^(?:BT|ET|q|Q|n|W\*?|re|f\*?|S|s)$/.test(trimmed)) return false;
+      if (/^\/?F\d+\s+[\d\.]+\s+Tf$/i.test(trimmed)) return false;
+      if (/^[\d\.\s\-]+(?:Tm|Td|TD|rg|RG|cm|re)$/i.test(trimmed)) return false;
+      if (/^<<.*>>$/.test(trimmed)) return false;
+      if (/^\/(?:Type|Subtype|Length|Filter|Pages|Font|ColorSpace|ProcSet)\b/i.test(trimmed)) return false;
+      return true;
+    })
+    .join('\n');
 }
 
 function nativeExtractPdfStreams(buffer: ArrayBuffer): string {
@@ -288,22 +349,37 @@ function cleanPdfString(str: string): string {
 
 function extractAsciiStringsFromBuffer(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
-  let result = '';
+  const collectedWords: string[] = [];
   let currentWord = '';
+
+  const isPdfNoise = (str: string) => {
+    const s = str.trim();
+    if (s.length < 3) return true;
+    if (/^[\d\.\s\-]+(?:rg|RG|re|cm|Tm|Td|TD|T\*|g|G)$/.test(s)) return true;
+    if (/^(?:BT|ET|q|Q|n|W\*?|re|f\*?|S|s|xref|trailer|startxref)$/.test(s)) return true;
+    if (/^\/?[A-Za-z0-9]+\s+[\d\.]+\s+Tf$/i.test(s)) return true;
+    if (/^\/(?:Type|Subtype|Length|Filter|Pages|Font|ColorSpace|ProcSet|XObject|MediaBox|CropBox|Parent|Root|Size|Info|Prev)\b/i.test(s)) return true;
+    if (/^<<.*>>$/.test(s)) return true;
+    if (/\b(?:FlateDecode|ASCIIHexDecode|DCTDecode|ObjStm|XRef)\b/.test(s)) return true;
+    return false;
+  };
 
   for (let i = 0; i < bytes.length; i++) {
     const byte = bytes[i];
     if ((byte >= 32 && byte <= 126) || byte === 10 || byte === 13) {
       currentWord += String.fromCharCode(byte);
     } else {
-      if (currentWord.length >= 4) {
-        result += currentWord + '\n';
+      if (currentWord.length >= 3) {
+        if (!isPdfNoise(currentWord)) {
+          collectedWords.push(currentWord.trim());
+        }
       }
       currentWord = '';
     }
   }
-  if (currentWord.length >= 4) {
-    result += currentWord + '\n';
+  if (currentWord.length >= 3 && !isPdfNoise(currentWord)) {
+    collectedWords.push(currentWord.trim());
   }
-  return result;
+
+  return collectedWords.join('\n');
 }

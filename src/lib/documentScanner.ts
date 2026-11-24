@@ -48,23 +48,34 @@ export async function scanDocumentFile(
       const buffer = await fileOrBlob.arrayBuffer();
       rawText = await extractTextFromPdf(buffer);
 
-      // If native text extraction yielded very little text (e.g. scanned image-only PDF),
+      // If text extraction yielded very little readable text or raw bytecode,
       // render the first page to a canvas and OCR with Tesseract
+      const isReadableText =
+        rawText &&
+        rawText.trim().length >= 30 &&
+        /(?:invoice|bill|tax|total|amount|subtotal|sub\s*total|gst|gstin|date|rate|qty|bag|kg|item|description|balance|due|rupee|payment|hsn|sac|cgst|sgst|igst|tools|supply|party|customer|buyer|vendor|supplier)/i.test(
+          rawText
+        );
+
       if (
-        (!rawText || rawText.trim().length < 30) &&
+        !isReadableText &&
         typeof window !== 'undefined' &&
         (window as any).pdfjsLib &&
         (window as any).Tesseract
       ) {
         try {
           const pdfjs = (window as any).pdfjsLib;
+          if (pdfjs.GlobalWorkerOptions && !pdfjs.GlobalWorkerOptions.workerSrc) {
+            pdfjs.GlobalWorkerOptions.workerSrc =
+              'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          }
           const loadingTask = pdfjs.getDocument({
             data: new Uint8Array(buffer),
-            disableWorker: true,
+            isEvalSupported: false,
           });
           const pdf = await Promise.race([
             loadingTask.promise,
-            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('PDF.js render timeout')), 6000)),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('PDF.js render timeout')), 8000)),
           ]);
           if (pdf.numPages >= 1) {
             const page = await pdf.getPage(1);
@@ -113,7 +124,16 @@ export function parseInvoiceText(
   const lines = text
     .split(/\r?\n/)
     .map((l) => l.trim())
-    .filter(Boolean);
+    .filter((l) => {
+      if (!l) return false;
+      // Filter out raw PDF command artifacts
+      if (/^(?:BT|ET|q|Q|n|W\*?|re|f\*?|S|s|xref|trailer|startxref)$/.test(l)) return false;
+      if (/^\/?F\d+\s+[\d\.]+\s+Tf$/i.test(l)) return false;
+      if (/^[\d\.\s\-]+(?:Tm|Td|TD|rg|RG|cm|re|g|G)$/.test(l)) return false;
+      if (/^<<.*>>$/.test(l)) return false;
+      if (/^\/(?:Type|Subtype|Length|Filter|Pages|Font|ColorSpace|ProcSet|XObject)\b/i.test(l)) return false;
+      return true;
+    });
 
   // 1. EXTRACT VENDOR NAME & CONTACT DETAILS
   let vendorName = '';
@@ -235,7 +255,7 @@ export function parseInvoiceText(
   // 2. EXTRACT BILL / INVOICE NUMBER
   let billNumber = '';
   const docNumRegex =
-    /(?:Q(?:TN)?\.?\s*(?:NO\.?|NUMBER|#)?|QUOTATION\s*(?:NO\.?|NUMBER|#)?|INVOICE\s*(?:NO\.?|NUMBER|#)?|INV\.?\s*(?:NO\.?|NUMBER|#)?|BILL\s*(?:NO\.?|NUMBER|#)?|CHALLAN\s*(?:NO\.?|NUMBER|#)?|DC\s*(?:NO\.?|NUMBER|#)?|REF\s*(?:NO\.?|NUMBER|#)?)\s*[:\-#]?\s*([A-Za-z0-9\/\-_]{2,30})/i;
+    /(?:(?:Tax\s+)?Invoice|Bill|Quotation|Qtn|Challan|DC|Ref)\s*(?:(?:No\.?|Num\.?|Number|#)\s*[:\-#]?|[:\-#])\s*([A-Za-z0-9\/\-_]{2,30})/i;
   const numMatch = text.match(docNumRegex);
 
   if (numMatch && numMatch[1]) {
@@ -317,9 +337,13 @@ export function parseInvoiceText(
   const lineItems: ExtractedLineItem[] = [];
 
   function checkLineCalculation(line: string) {
+    if (/\b(?:BT|ET|Tf|Tm|rg|RG|re|cm|Td|TD)\b/.test(line)) return null;
     const tokens = line.trim().split(/\s+/);
     if (tokens.length < 2) return null;
+
     const candidateNums = tokens.map((t) => {
+      // Disallow tokens that are part of commands like 0.2rg or words like Tm
+      if (/[a-zA-Z]{2,}/.test(t)) return null;
       const clean = t.replace(/[₹,]/g, '');
       const val = parseFloat(clean);
       return isNaN(val) ? null : val;
@@ -338,12 +362,12 @@ export function parseInvoiceText(
           if (aVal === null || aVal <= 0) continue;
 
           let isMatch = Math.abs(qVal * rVal - aVal) < 1.0;
-          if (!isMatch) {
+          if (!isMatch && aVal >= 5 && qVal >= 0.5 && rVal >= 1) {
             for (const pct of [5, 10, 12, 15, 18, 20, 25, 28]) {
-              if (
-                Math.abs(qVal * rVal * (1 - pct / 100) - aVal) < 1.5 ||
-                Math.abs(qVal * rVal * (1 + pct / 100) - aVal) < 1.5
-              ) {
+              const withDiscount = qVal * rVal * (1 - pct / 100);
+              const withTax = qVal * rVal * (1 + pct / 100);
+              const tolerance = Math.max(1.0, aVal * 0.02);
+              if (Math.abs(withDiscount - aVal) <= tolerance || Math.abs(withTax - aVal) <= tolerance) {
                 isMatch = true;
                 break;
               }
@@ -354,7 +378,7 @@ export function parseInvoiceText(
             let unit = 'pcs';
             if (
               qIdx + 1 < tokens.length &&
-              /^(pcs|nos|box|boxes|kg|kgs|m|meter|meters|units?|set|sets|pack|packs|pair|pairs|roll|rolls|bundle|bundles|ltr|litres?)$/i.test(
+              /^(pcs|nos|box|boxes|kg|kgs|bag|bags|sack|sacks|m|meter|meters|units?|set|sets|pack|packs|pair|pairs|roll|rolls|bundle|bundles|ltr|litres?|drum|drums|can|cans|barrel|barrels|carton|cartons|pkt|pkts)$/i.test(
                 tokens[qIdx + 1]
               )
             ) {
@@ -370,9 +394,9 @@ export function parseInvoiceText(
 
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
-    // Ignore summary, tax and header lines
+    // Ignore summary, tax, notes and header lines
     if (
-      /^(?:Taxable\s+Value|Total|Sub\s*Total|CGST|SGST|IGST|Round|Amount\s+Chargeable|Company's|Customer|Buyer|State\s+Name)/i.test(
+      /^(?:Taxable\s+Value|Total|Sub\s*Total|CGST|SGST|IGST|Round|Amount\s+Chargeable|Company's|Customer|Buyer|State\s+Name|Notes|Balance\s+Due|Crafted\s+with|HSN\/SAC)/i.test(
         l
       )
     ) {
@@ -384,7 +408,7 @@ export function parseInvoiceText(
       let descTokens = match.tokens.slice(0, match.qtyIdx);
       if (/^\d+[\.\-]?$/.test(descTokens[0])) descTokens = descTokens.slice(1);
       if (/^\d{4,8}$/.test(descTokens[descTokens.length - 1])) descTokens = descTokens.slice(0, -1);
-      if (/^(pcs|nos|box|kg|m)$/i.test(descTokens[descTokens.length - 1])) descTokens = descTokens.slice(0, -1);
+      if (/^(pcs|nos|box|kg|m|bag)$/i.test(descTokens[descTokens.length - 1])) descTokens = descTokens.slice(0, -1);
 
       let description = descTokens.join(' ').trim();
 
@@ -400,10 +424,10 @@ export function parseInvoiceText(
       while (i + 1 < lines.length) {
         const nextLine = lines[i + 1].trim();
         if (checkLineCalculation(nextLine)) break;
-        if (/(?:Total|Sub\s*Total|Tax|IGST|CGST|SGST|Round|Thank|Terms|Bank|Authorized)/i.test(nextLine)) break;
+        if (/(?:Total|Sub\s*Total|Tax|IGST|CGST|SGST|Round|Thank|Terms|Bank|Authorized|Crafted|HSN)/i.test(nextLine)) break;
 
         let cleanContinuation = nextLine;
-        const unitMatch = cleanContinuation.match(/\b(pcs|nos|box|kg|m|meter|units?|set)\b/i);
+        const unitMatch = cleanContinuation.match(/\b(pcs|nos|box|kg|m|meter|units?|set|bag|bags)\b/i);
         if (unitMatch) {
           match.unit = unitMatch[1].toLowerCase();
           cleanContinuation = cleanContinuation.replace(unitMatch[0], '').trim();
@@ -415,7 +439,12 @@ export function parseInvoiceText(
         i++;
       }
 
-      if (description.length > 2) {
+      if (
+        description.length > 2 &&
+        /[a-zA-Z]{2,}/.test(description) &&
+        !/\b(?:BT|ET|Tf|Tm|rg|RG)\b/.test(description) &&
+        !/^[0-9\.\s\-,\/]+$/.test(description)
+      ) {
         lineItems.push({
           num: String(lineItems.length + 1),
           name: description,
@@ -492,7 +521,7 @@ export function parseInvoiceText(
     }
 
     // Grand Total line
-    if (/^(?:Total|Grand\s*Total|Invoice\s*Total|Total\s*Amount)\b/i.test(line) && !/tax|words/i.test(line)) {
+    if (/^(?:Total|Grand\s*Total|Invoice\s*Total|Total\s*Amount|Balance\s*Due)\b/i.test(line) && !/tax|words/i.test(line)) {
       const amounts = Array.from(line.matchAll(/\b(\d{1,3}(?:,\d{2,3})*\.\d{2}|\d+\.\d{2})\b/g))
         .map((m) => parseFloat(m[1].replace(/,/g, '')))
         .filter((v) => v > 0);
@@ -550,7 +579,7 @@ export function parseInvoiceText(
   if (grandTotal === 0) {
     for (let i = lines.length - 1; i >= 0; i--) {
       const l = lines[i];
-      if (/^(?:Total|Grand\s+Total|Invoice\s+Total|Net\s+Amount|Total\s+Amount)\b/i.test(l) && !/tax\s+amount|words/i.test(l)) {
+      if (/^(?:Total|Grand\s+Total|Invoice\s+Total|Net\s+Amount|Total\s+Amount|Balance\s+Due)\b/i.test(l) && !/tax\s+amount|words/i.test(l)) {
         const amounts = Array.from(l.matchAll(/₹?\s*([\d,]+\.\d{2}|\b\d{4,8}\b)/g))
           .map((m) => parseFloat(m[1].replace(/,/g, '')))
           .filter((v) => v > (subtotal > 0 ? subtotal * 0.8 : 0));
