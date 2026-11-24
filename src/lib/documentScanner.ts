@@ -142,42 +142,80 @@ export function parseInvoiceText(
   let address: string | null = null;
   let gstNumber: string | null = null;
 
-  // Identify where customer/buyer section starts (e.g. "Bill To", "Ship To", "Buyer (Bill to)")
+  // Check if document is a Purchase Order (PO)
+  const isPurchaseOrder = /\b(?:Purchase\s+Order|PO\s*#|P\.?O\.?\s*(?:No|Number|#))\b/i.test(text);
+
+  // In a Purchase Order, the company at the top is the BUYER, and the VENDOR is under "Vendor Address" or "Vendor:"
+  if (isPurchaseOrder) {
+    const vMatch = text.match(
+      /(?:Vendor\s+Address|Vendor(?:\s+Name)?|Supplier(?:\s+Name)?)\s*[:\-]?\s*[\r\n]+([A-Za-z0-9&.,'\s\-()]{3,60})/i
+    );
+    if (vMatch) {
+      vendorName = vMatch[1].split(/\r?\n/)[0].trim();
+    }
+    const vendorBlockMatch = text.split(/(?:Vendor\s+Address|Vendor:)/i)[1]?.split(/(?:Deliver\s+To|Ship\s+To|Date\s*:|#\s*Item)/i)[0];
+    if (vendorBlockMatch) {
+      const g = vendorBlockMatch.match(/\b\d{2}[A-Z]{5}\d{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}\b/);
+      if (g) gstNumber = g[0];
+      const addrLines = vendorBlockMatch
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startsWith('GSTIN') && !l.startsWith('Vendor') && l !== vendorName && !/^(?:phone|email)/i.test(l));
+      if (addrLines.length > 0) address = addrLines.join(', ');
+    }
+  }
+
+  // Identify where customer/buyer section starts (e.g. "Bill To", "Ship To", "Buyer (Bill to)", "Deliver To")
   const buyerIndex = lines.findIndex((l) =>
-    /^(?:Bill\s+To|Ship\s+To|Invoice\s+To|Customer|Buyer|Billed\s+To|Shipped\s+To|Party\s+Name)\b/i.test(l)
+    /^(?:Bill\s+To|Ship\s+To|Invoice\s+To|Deliver\s+To|Customer|Buyer|Billed\s+To|Shipped\s+To|Party\s+Name)\b/i.test(l)
   );
   const headerLines = buyerIndex > 0 ? lines.slice(0, buyerIndex) : lines.slice(0, 10);
   const headerText = headerLines.join('\n');
 
-  // Supplier GSTIN in header (before "Bill To")
-  const supplierGstMatch = headerText.match(/\b\d{2}[A-Z]{5}\d{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}\b/);
-  if (supplierGstMatch) {
-    gstNumber = supplierGstMatch[0];
-  } else {
-    const anyGst = text.match(/\b\d{2}[A-Z]{5}\d{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}\b/);
-    if (anyGst) gstNumber = anyGst[0];
+  // Supplier GSTIN in header (before "Bill To") if not already found in PO vendor block
+  if (!gstNumber) {
+    const supplierGstMatch = headerText.match(/\b\d{2}[A-Z]{5}\d{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}\b/);
+    if (supplierGstMatch) {
+      gstNumber = supplierGstMatch[0];
+    } else {
+      const anyGst = text.match(/\b\d{2}[A-Z]{5}\d{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}\b/);
+      if (anyGst) gstNumber = anyGst[0];
+    }
   }
 
   // Phone in header
-  const phoneMatch = headerText.match(/(?:Phone|Ph|Tel|Mobile|Contact|Cell)\s*[:\-]?\s*([+0-9\s\/\-,]{8,25})/i);
-  if (phoneMatch) phone = phoneMatch[1].trim();
+  if (!phone) {
+    const phoneMatch = headerText.match(/(?:Phone|Ph|Tel|Mobile|Contact|Cell)\s*[:\-]?\s*([+0-9\s\/\-,]{8,25})/i);
+    if (phoneMatch) phone = phoneMatch[1].trim();
+  }
 
   // Email in header
-  const emailMatch = headerText.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/);
-  if (emailMatch) email = emailMatch[0].trim();
+  if (!email) {
+    const emailMatch = headerText.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/);
+    if (emailMatch) email = emailMatch[0].trim();
+  }
 
   // Address in header
-  const addrMatch = headerText.match(/(?:H\.?O\.?|B\.?O\.?|Address|Works|Factory|Kasturi|Building|Street|Road)\s*[:\-]?\s*([^\n]+)/i);
-  if (addrMatch) address = addrMatch[1].trim();
+  if (!address) {
+    const addrMatch = headerText.match(/(?:H\.?O\.?|B\.?O\.?|Address|Works|Factory|Kasturi|Building|Street|Road)\s*[:\-]?\s*([^\n]+)/i);
+    if (addrMatch) {
+      const candidateAddr = addrMatch[1].trim();
+      if (!/^(?:Purchase\s+Order|Tax\s+Invoice|Invoice|Quotation|Bill|Challan)/i.test(candidateAddr)) {
+        address = candidateAddr;
+      }
+    }
+  }
 
   // Priority A: Explicit Vendor / Supplier label
-  const explicitVendorMatch = text.match(
-    /(?:Supplier(?:\s+Name)?|Vendor(?:\s+Name)?|Seller|Sold\s+By|Billed\s+By|Dispatched\s+From|Consignor)\s*[:\-]\s*([A-Za-z0-9&.,'\s\-()]{3,50})/i
-  );
-  if (explicitVendorMatch) {
-    const candidate = explicitVendorMatch[1].split(/\r?\n/)[0].trim();
-    if (candidate.length >= 3 && !/customer|buyer|client|recipient|billing/i.test(candidate)) {
-      vendorName = candidate;
+  if (!vendorName) {
+    const explicitVendorMatch = text.match(
+      /(?:Supplier(?:\s+Name)?|Vendor(?:\s+Name)?|Seller|Sold\s+By|Billed\s+By|Dispatched\s+From|Consignor)\s*[:\-]\s*([A-Za-z0-9&.,'\s\-()]{3,50})/i
+    );
+    if (explicitVendorMatch) {
+      const candidate = explicitVendorMatch[1].split(/\r?\n/)[0].trim();
+      if (candidate.length >= 3 && !/customer|buyer|client|recipient|billing/i.test(candidate)) {
+        vendorName = candidate;
+      }
     }
   }
 
@@ -254,22 +292,31 @@ export function parseInvoiceText(
 
   // 2. EXTRACT BILL / INVOICE NUMBER
   let billNumber = '';
-  const docNumRegex =
-    /(?:(?:Tax\s+)?Invoice|Bill|Quotation|Qtn|Challan|DC|Ref)\s*(?:(?:No\.?|Num\.?|Number|#)\s*[:\-#]?|[:\-#])\s*([A-Za-z0-9\/\-_]{2,30})/i;
-  const numMatch = text.match(docNumRegex);
 
-  if (numMatch && numMatch[1]) {
-    const candidate = numMatch[1].trim();
-    if (!/^(to|for|is|date|dated|the|and|details|of|m|bash|tax)$/i.test(candidate)) {
-      billNumber = candidate;
+  // Purchase Order specific format: e.g. "Purchase Order \n # BT/25-26/PO-0031" or "# BT/25-26/PO-0031"
+  const poNumMatch = text.match(/(?:Purchase\s+Order|PO\s*Order|PO)?\s*[\r\n\s]*#\s*([A-Za-z0-9\/\-_]{2,30})/i);
+  if (isPurchaseOrder && poNumMatch && poNumMatch[1]) {
+    billNumber = poNumMatch[1].trim();
+  }
+
+  if (!billNumber) {
+    const docNumRegex =
+      /(?:(?:Tax\s+)?Invoice|Bill|Quotation|Qtn|Challan|DC|Ref|Purchase\s+Order|PO)\s*(?:(?:No\.?|Num\.?|Number|#)\s*[:\-#]?|[:\-#])\s*([A-Za-z0-9\/\-_]{2,30})/i;
+    const numMatch = text.match(docNumRegex);
+
+    if (numMatch && numMatch[1]) {
+      const candidate = numMatch[1].trim();
+      if (!/^(to|for|is|date|dated|the|and|details|of|m|bash|tax)$/i.test(candidate)) {
+        billNumber = candidate;
+      }
     }
   }
 
   // Check if Invoice No. is immediately followed on the next line by a number
   if (!billNumber) {
-    const invNoIdx = lines.findIndex((l) => /^(?:Invoice|Bill|Quotation|Q|Challan)\s*(?:No\.?|#|\/)?/i.test(l));
+    const invNoIdx = lines.findIndex((l) => /^(?:Invoice|Bill|Quotation|Q|Challan|Purchase\s+Order)\s*(?:No\.?|#|\/)?/i.test(l));
     if (invNoIdx !== -1 && invNoIdx + 1 < lines.length) {
-      const nextCandidate = lines[invNoIdx + 1].trim().split(/\s+/)[0];
+      const nextCandidate = lines[invNoIdx + 1].trim().split(/\s+/)[0].replace(/^#/, '');
       if (/^[A-Za-z0-9\/\-_]{2,30}$/.test(nextCandidate) && !/^(to|for|date|dated|tax)$/i.test(nextCandidate)) {
         billNumber = nextCandidate;
       }
@@ -278,9 +325,9 @@ export function parseInvoiceText(
 
   // Filename fallback (e.g. Sales_2108_26-27.pdf -> 2108/26-27)
   if (!billNumber) {
-    const fileNumMatch = cleanName.match(/(?:Sales|INV|Bill|Q)?[-_ ]*([a-zA-Z0-9\/\-_]{2,25})/i);
-    if (fileNumMatch && !/^(bill|invoice|doc|scan|file|pdf)$/i.test(fileNumMatch[1])) {
-      billNumber = fileNumMatch[1].replace(/^(Sales|INV|Bill)_/i, '').replace(/_/g, '/');
+    const fileNumMatch = cleanName.match(/(?:Sales|INV|Bill|Q|PO)?[-_ ]*([a-zA-Z0-9\/\-_]{2,25})/i);
+    if (fileNumMatch && !/^(bill|invoice|doc|scan|file|pdf|purchase|order)$/i.test(fileNumMatch[1])) {
+      billNumber = fileNumMatch[1].replace(/^(Sales|INV|Bill|PO)_/i, '').replace(/_/g, '/');
     } else {
       billNumber = 'INV-' + Math.floor(1000 + Math.random() * 9000);
     }
@@ -356,10 +403,21 @@ export function parseInvoiceText(
       if (qVal === null || qVal <= 0 || qVal > 50000) continue;
       for (let rIdx = qIdx + 1; rIdx < candidateNums.length; rIdx++) {
         const rVal = candidateNums[rIdx];
-        if (rVal === null || rVal <= 0) continue;
+        if (rVal === null || rVal < 0) continue;
         for (let aIdx = rIdx + 1; aIdx < candidateNums.length; aIdx++) {
           const aVal = candidateNums[aIdx];
-          if (aVal === null || aVal <= 0) continue;
+          if (aVal === null || aVal < 0) continue;
+
+          // If rate is 0 and amount is 0 (unpriced PO or delivery challan), require an explicit unit right after qty OR a leading S.No to prevent false positives
+          const hasExplicitUnit =
+            qIdx + 1 < tokens.length &&
+            /^(pcs|nos|box|boxes|kg|kgs|bag|bags|sack|sacks|m|meter|meters|units?|set|sets|pack|packs|pair|pairs|roll|rolls|bundle|bundles|ltr|litres?|drum|drums|can|cans|barrel|barrels|carton|cartons|pkt|pkts|sheet|sheets)$/i.test(
+              tokens[qIdx + 1]
+            );
+
+          if (rVal === 0 && aVal === 0 && !hasExplicitUnit && !hasLeadingSno) {
+            continue;
+          }
 
           let isMatch = Math.abs(qVal * rVal - aVal) < 1.0;
           if (!isMatch && aVal >= 5 && qVal >= 0.5 && rVal >= 1) {
@@ -376,12 +434,7 @@ export function parseInvoiceText(
 
           if (isMatch) {
             let unit = 'pcs';
-            if (
-              qIdx + 1 < tokens.length &&
-              /^(pcs|nos|box|boxes|kg|kgs|bag|bags|sack|sacks|m|meter|meters|units?|set|sets|pack|packs|pair|pairs|roll|rolls|bundle|bundles|ltr|litres?|drum|drums|can|cans|barrel|barrels|carton|cartons|pkt|pkts)$/i.test(
-                tokens[qIdx + 1]
-              )
-            ) {
+            if (hasExplicitUnit) {
               unit = tokens[qIdx + 1].toLowerCase();
             }
             return { qty: qVal, rate: rVal, amount: aVal, qtyIdx: qIdx, unit, tokens };
@@ -396,7 +449,7 @@ export function parseInvoiceText(
     const l = lines[i];
     // Ignore summary, tax, notes and header lines
     if (
-      /^(?:Taxable\s+Value|Total|Sub\s*Total|CGST|SGST|IGST|Round|Amount\s+Chargeable|Company's|Customer|Buyer|State\s+Name|Notes|Balance\s+Due|Crafted\s+with|HSN\/SAC)/i.test(
+      /^(?:Taxable\s+Value|Total|Sub\s*Total|CGST|SGST|IGST|Round|Amount\s+Chargeable|Company's|Customer|Buyer|State\s+Name|Notes|Balance\s+Due|Crafted\s+with|HSN\/SAC|Authorized)/i.test(
         l
       )
     ) {
@@ -412,10 +465,10 @@ export function parseInvoiceText(
 
       let description = descTokens.join(' ').trim();
 
-      // Look back to previous line if description on current line is missing/empty!
-      if (description.length <= 2 && i > 0) {
+      // Look back to previous line only if description on current line is completely empty!
+      if (description.length === 0 && i > 0) {
         const prev = lines[i - 1].trim();
-        if (prev.length > 2 && !/^(?:Total|Sub|Tax|Invoice|Bill|Date|GST|HSN|S\.?No)/i.test(prev)) {
+        if (prev.length > 2 && !/^(?:Total|Sub|Tax|Invoice|Bill|Date|GST|HSN|S\.?No|Item|Description|Qty|Rate|Amount|#)/i.test(prev)) {
           description = prev.replace(/^\d+[\.\-]?\s*/, '').trim();
         }
       }
@@ -427,7 +480,7 @@ export function parseInvoiceText(
         if (/(?:Total|Sub\s*Total|Tax|IGST|CGST|SGST|Round|Thank|Terms|Bank|Authorized|Crafted|HSN)/i.test(nextLine)) break;
 
         let cleanContinuation = nextLine;
-        const unitMatch = cleanContinuation.match(/\b(pcs|nos|box|kg|m|meter|units?|set|bag|bags)\b/i);
+        const unitMatch = cleanContinuation.match(/\b(pcs|nos|box|kg|m|meter|units?|set|bag|bags|sheet|sheets)\b/i);
         if (unitMatch) {
           match.unit = unitMatch[1].toLowerCase();
           cleanContinuation = cleanContinuation.replace(unitMatch[0], '').trim();
