@@ -467,13 +467,20 @@ export function parseInvoiceText(
   let grandTotal = 0;
   let taxAmount = 0;
 
-  // Extract from line items sum first
-  if (lineItems.length > 0) {
-    subtotal = Math.round(lineItems.reduce((s, it) => s + it.amount, 0) * 100) / 100;
-  }
+  // Ground truth: Extract subtotal from line items sum first
+  const lineItemsSum =
+    lineItems.length > 0 ? Math.round(lineItems.reduce((s, it) => s + it.amount, 0) * 100) / 100 : 0;
+  subtotal = lineItemsSum;
+
+  // Identify HSN summary section at bottom to prevent summary tax rows from overriding invoice grand totals
+  const hsnSummaryIdx = lines.findIndex((l) =>
+    /^(?:HSN\/SAC\s+Summary|HSN\s+Summary|Tax\s+Summary)\b/i.test(l)
+  );
 
   // Line-by-line scanning for taxes & rounding
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
     // Round Off
     const roundMatch = line.match(/(?:Round(?:ed)?\s*Off|Rounding)\s*[:\-]?\s*([+\-]?\s*[\d,]+\.\d{2})/i);
     if (roundMatch) {
@@ -510,23 +517,36 @@ export function parseInvoiceText(
       }
     }
 
-    // Subtotal
+    // Subtotal:
+    // In multi-column invoice rows (e.g. "Sub Total 28,000.00 28,000.00 2,520.00 2,520.00"):
+    // The first amounts are Sub Total / Taxable; the trailing columns are CGST and SGST column totals!
     if (/\b(?:Sub\s*Total|Taxable\s+Value)\b/i.test(line)) {
       const amounts = Array.from(line.matchAll(/\b(\d{1,3}(?:,\d{2,3})*\.\d{2}|\d+\.\d{2})\b/g))
         .map((m) => parseFloat(m[1].replace(/,/g, '')))
         .filter((v) => v > 0);
       if (amounts.length > 0) {
-        subtotal = amounts[amounts.length - 1];
+        const lineItemMatch = amounts.find((a) => lineItemsSum > 0 && Math.abs(a - lineItemsSum) < 1.0);
+        if (lineItemMatch) {
+          subtotal = lineItemMatch;
+        } else if (subtotal === 0) {
+          subtotal = amounts[0];
+        }
       }
     }
 
-    // Grand Total line
-    if (/^(?:Total|Grand\s*Total|Invoice\s*Total|Total\s*Amount|Balance\s*Due)\b/i.test(line) && !/tax|words/i.test(line)) {
-      const amounts = Array.from(line.matchAll(/\b(\d{1,3}(?:,\d{2,3})*\.\d{2}|\d+\.\d{2})\b/g))
-        .map((m) => parseFloat(m[1].replace(/,/g, '')))
-        .filter((v) => v > 0);
-      if (amounts.length > 0) {
-        grandTotal = amounts[amounts.length - 1];
+    // Grand Total line:
+    // Only search before the bottom HSN summary table (to avoid picking up HSN summary tax column totals)
+    if (hsnSummaryIdx === -1 || i < hsnSummaryIdx) {
+      if (/^(?:Total|Grand\s*Total|Invoice\s*Total|Total\s*Amount|Balance\s*Due)\b/i.test(line) && !/tax|words/i.test(line)) {
+        const amounts = Array.from(line.matchAll(/\b(\d{1,3}(?:,\d{2,3})*\.\d{2}|\d+\.\d{2})\b/g))
+          .map((m) => parseFloat(m[1].replace(/,/g, '')))
+          .filter((v) => v > 0);
+        if (amounts.length > 0) {
+          const maxAmount = Math.max(...amounts);
+          if (maxAmount > (subtotal > 0 ? subtotal * 0.8 : 0)) {
+            grandTotal = maxAmount;
+          }
+        }
       }
     }
   }
@@ -552,7 +572,7 @@ export function parseInvoiceText(
   if (sgst > 0 && cgst === 0) cgst = sgst;
 
   // Calculate total tax amount
-  if (cgst + sgst + igst > 0) {
+  if (cgst + sgst + igst > 0 && taxAmount === 0) {
     taxAmount = Math.round((cgst + sgst + igst) * 100) / 100;
   }
 
@@ -565,38 +585,46 @@ export function parseInvoiceText(
   }
 
   // Grand Total in Words (e.g. Indian Rupees Nineteen Thousand Eight Hundred Thirty Only)
-  const wordsMatch = text.match(
-    /(?:Amount\s+Chargeable\s*\(in\s+words\)|\bTotal\s+in\s+Words)\s*[:\-]?\s*([A-Za-z\s\-]+(?:Only)?)/i
-  );
-  if (wordsMatch) {
-    const wordsNum = wordsToNumber(wordsMatch[1]);
-    if (wordsNum > 0) {
-      grandTotal = wordsNum;
+  if (grandTotal === 0) {
+    const wordsMatch = text.match(
+      /(?:Amount\s+Chargeable\s*\(in\s+words\)|\bTotal\s+in\s+Words)\s*[:\-]?\s*([A-Za-z\s\-]+(?:Only)?)/i
+    );
+    if (wordsMatch) {
+      const wordsNum = wordsToNumber(wordsMatch[1]);
+      if (wordsNum > 0) {
+        grandTotal = wordsNum;
+      }
     }
   }
 
   // Grand Total from numeric lines (e.g. Total 25 Nos. ₹ 19,830.00 or Total: 62,755.00)
   if (grandTotal === 0) {
-    for (let i = lines.length - 1; i >= 0; i--) {
+    const endIdx = hsnSummaryIdx !== -1 ? hsnSummaryIdx : lines.length;
+    for (let i = endIdx - 1; i >= 0; i--) {
       const l = lines[i];
       if (/^(?:Total|Grand\s+Total|Invoice\s+Total|Net\s+Amount|Total\s+Amount|Balance\s+Due)\b/i.test(l) && !/tax\s+amount|words/i.test(l)) {
         const amounts = Array.from(l.matchAll(/₹?\s*([\d,]+\.\d{2}|\b\d{4,8}\b)/g))
           .map((m) => parseFloat(m[1].replace(/,/g, '')))
           .filter((v) => v > (subtotal > 0 ? subtotal * 0.8 : 0));
         if (amounts.length > 0) {
-          grandTotal = amounts[amounts.length - 1];
+          grandTotal = Math.max(...amounts);
           break;
         }
       }
     }
   }
 
-  // CRITICAL GST CALCULATION ENFORCEMENT:
-  // Grand Total MUST include Subtotal + TaxAmount + Rounding.
-  // Example: Subtotal 16,805.00 + GST 3,024.90 = Grand Total 19,829.90 (or 19,830.00 with rounding)
+  // CRITICAL GST CALCULATION ENFORCEMENT & HARMONIZATION:
+  // 1. Line items sum is the primary ground truth: Subtotal must equal line items sum
+  if (lineItemsSum > 0 && (subtotal === 0 || Math.abs(subtotal - lineItemsSum) > 2)) {
+    subtotal = lineItemsSum;
+  }
+
+  // 2. Grand Total MUST strictly equal Subtotal + TaxAmount + Rounding.
+  // Example: Subtotal 28,000.00 + GST 5,040.00 = Grand Total 33,040.00
+  const expectedTotal = Math.round((subtotal + taxAmount + rounding) * 100) / 100;
   if (subtotal > 0 && taxAmount > 0) {
-    const expectedTotal = Math.round((subtotal + taxAmount + rounding) * 100) / 100;
-    // If grandTotal was mistakenly assigned pre-tax subtotal (e.g. 16,805.00), or was 0, or is lower than subtotal + tax
+    // If grandTotal was mistakenly assigned pre-tax subtotal or was 0, or is lower than subtotal + tax
     if (grandTotal === 0 || Math.abs(grandTotal - subtotal) < 2 || grandTotal < subtotal + taxAmount - 2) {
       grandTotal = expectedTotal;
     } else if (Math.abs(grandTotal - (subtotal + taxAmount)) <= 5) {
@@ -611,7 +639,7 @@ export function parseInvoiceText(
       sgst = Math.round((taxAmount / 2) * 100) / 100;
     }
   } else if (grandTotal === 0 && subtotal > 0) {
-    grandTotal = Math.round((subtotal + taxAmount + rounding) * 100) / 100;
+    grandTotal = expectedTotal;
   } else if (subtotal === 0 && grandTotal > 0) {
     subtotal = taxAmount > 0 ? Math.round((grandTotal - taxAmount - rounding) * 100) / 100 : grandTotal;
   }

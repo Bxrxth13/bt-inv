@@ -221,6 +221,11 @@ export function BillsPage() {
       };
     });
 
+    const linesSum = Math.round(mappedItems.reduce((s, it) => s + (it.amount || 0), 0) * 100) / 100;
+    const billSubtotal = linesSum > 0 ? linesSum : parsed.subtotal;
+    const billTax = parsed.taxAmount || Math.round((parsed.cgst + parsed.sgst + parsed.igst) * 100) / 100;
+    const billAmount = Math.round((billSubtotal + billTax + parsed.rounding) * 100) / 100;
+
     const { data: newBill, error: insErr } = await supabase
       .from('bills')
       .insert({
@@ -230,12 +235,12 @@ export function BillsPage() {
         vendor_id: matchedVendorId,
         bill_number: parsed.billNumber,
         bill_date: parsed.billDate,
-        amount: parsed.amount,
-        subtotal: parsed.subtotal,
+        amount: billAmount,
+        subtotal: billSubtotal,
         cgst: parsed.cgst,
         sgst: parsed.sgst,
         igst: parsed.igst,
-        tax_amount: parsed.taxAmount,
+        tax_amount: billTax,
         rounding: parsed.rounding,
         extracted_text: parsed.rawText,
         line_items: mappedItems,
@@ -426,25 +431,30 @@ export function BillsPage() {
         };
       });
 
+      const linesSum = Math.round(mappedItems.reduce((s, it) => s + (it.amount || 0), 0) * 100) / 100;
+      const billSubtotal = linesSum > 0 ? linesSum : parsed.subtotal;
+      const billTax = parsed.taxAmount || Math.round((parsed.cgst + parsed.sgst + parsed.igst) * 100) / 100;
+      const billAmount = Math.round((billSubtotal + billTax + parsed.rounding) * 100) / 100;
+
       const updatedFields: Partial<Bill> = {
         status: bill.status === 'processed' ? 'processed' : 'pending',
         vendor_id: matchedVendorId || null,
         bill_number: parsed.billNumber,
         bill_date: parsed.billDate,
-        amount: parsed.amount,
-        subtotal: parsed.subtotal,
+        amount: billAmount,
+        subtotal: billSubtotal,
         cgst: parsed.cgst,
         sgst: parsed.sgst,
         igst: parsed.igst,
-        tax_amount: parsed.taxAmount,
+        tax_amount: billTax,
         rounding: parsed.rounding,
         extracted_text: parsed.rawText || bill.extracted_text,
         line_items: mappedItems,
       };
 
       await supabase.from('bills').update(updatedFields).eq('id', billId);
-      const gstLabel = parsed.taxAmount > 0 ? ` (GST: ₹${parsed.taxAmount.toLocaleString('en-IN')})` : '';
-      toast.success(`Parsed: ₹${parsed.amount.toLocaleString('en-IN')} Total${gstLabel}`);
+      const gstLabel = billTax > 0 ? ` (GST: ₹${billTax.toLocaleString('en-IN')})` : '';
+      toast.success(`Parsed: ₹${billAmount.toLocaleString('en-IN')} Total${gstLabel}`);
 
       // Check for duplicate against other bills
       const conflict = findDuplicateInBills(
@@ -729,7 +739,7 @@ function ScannerDetailingView({
       ...it,
       num: it.num || String(idx + 1),
       matched_item_id: it.matched_item_id || '__new__',
-      unit: it.unit || 'pc',
+      unit: it.unit || 'pcs',
       category_id: it.category_id || categories[0]?.id || null,
       reorder_level: it.reorder_level ?? 10,
       sku: it.sku || '',
@@ -737,14 +747,26 @@ function ScannerDetailingView({
     }));
   });
 
-  // Financials & Payment states
-  const [subtotal, setSubtotal] = useState<number>(Number(bill.subtotal) || 0);
+  // Financials & Payment states (with automatic ground truth from line items)
+  const parsedLinesSum = Math.round(
+    (bill.line_items || []).reduce((s, it) => s + (Number(it.amount) || 0), 0) * 100
+  ) / 100;
+  const initialSub = parsedLinesSum > 0 && (Number(bill.subtotal) === 0 || Math.abs(parsedLinesSum - Number(bill.subtotal)) > 2)
+    ? parsedLinesSum
+    : Number(bill.subtotal) || parsedLinesSum;
+
+  const [subtotal, setSubtotal] = useState<number>(initialSub);
   const [cgst, setCgst] = useState<number>(Number(bill.cgst) || 0);
   const [sgst, setSgst] = useState<number>(Number(bill.sgst) || 0);
   const [igst, setIgst] = useState<number>(Number(bill.igst) || 0);
-  const [taxAmount, setTaxAmount] = useState<number>(Number(bill.tax_amount) || 0);
+  const initialTax = Number(bill.tax_amount) || Math.round((Number(bill.cgst || 0) + Number(bill.sgst || 0) + Number(bill.igst || 0)) * 100) / 100;
+  const [taxAmount, setTaxAmount] = useState<number>(initialTax);
   const [rounding, setRounding] = useState<number>(Number(bill.rounding) || 0);
-  const [amount, setAmount] = useState<number>(Number(bill.amount) || 0);
+  const calculatedInitTotal = Math.round((initialSub + initialTax + Number(bill.rounding || 0)) * 100) / 100;
+  const initialAmt = initialSub > 0 && (Number(bill.amount) === 0 || Math.abs(Number(bill.amount) - calculatedInitTotal) > 1)
+    ? calculatedInitTotal
+    : Number(bill.amount) || calculatedInitTotal;
+  const [amount, setAmount] = useState<number>(initialAmt);
 
   const [addToPayments, setAddToPayments] = useState<boolean>(true);
   const [dueDate, setDueDate] = useState<string>(bill.due_date || '');
@@ -787,7 +809,13 @@ function ScannerDetailingView({
         rack_location: it.rack_location || '',
       }))
     );
-    const initialSub = Number(bill.subtotal) || 0;
+    const currentLinesSum = Math.round(
+      (bill.line_items || []).reduce((s, it) => s + (Number(it.amount) || 0), 0) * 100
+    ) / 100;
+    let syncSub = Number(bill.subtotal) || 0;
+    if (currentLinesSum > 0 && (syncSub === 0 || Math.abs(currentLinesSum - syncSub) > 2)) {
+      syncSub = currentLinesSum;
+    }
     const initialCgst = Number(bill.cgst) || 0;
     const initialSgst = Number(bill.sgst) || 0;
     const initialIgst = Number(bill.igst) || 0;
@@ -795,16 +823,16 @@ function ScannerDetailingView({
     const initialRound = Number(bill.rounding) || 0;
     let initialAmt = Number(bill.amount) || 0;
 
-    const expectedTotal = Math.round((initialSub + initialTax + initialRound) * 100) / 100;
-    if (initialSub > 0 && initialTax > 0) {
-      if (initialAmt === 0 || Math.abs(initialAmt - initialSub) < 2 || Math.abs(initialAmt - expectedTotal) > 1) {
+    const expectedTotal = Math.round((syncSub + initialTax + initialRound) * 100) / 100;
+    if (syncSub > 0 && initialTax > 0) {
+      if (initialAmt === 0 || Math.abs(initialAmt - syncSub) < 2 || Math.abs(initialAmt - expectedTotal) > 1) {
         initialAmt = expectedTotal;
       }
-    } else if (initialAmt === 0 && initialSub > 0) {
-      initialAmt = Math.round((initialSub + initialRound) * 100) / 100;
+    } else if (initialAmt === 0 && syncSub > 0) {
+      initialAmt = Math.round((syncSub + initialRound) * 100) / 100;
     }
 
-    setSubtotal(initialSub);
+    setSubtotal(syncSub);
     setCgst(initialCgst);
     setSgst(initialSgst);
     setIgst(initialIgst);
