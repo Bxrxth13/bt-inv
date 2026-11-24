@@ -1,0 +1,9 @@
+{
+  "projectId": "73022793",
+  "functions": {
+    "scan-bill": {
+      "hasChanged": false,
+      "hash": "054b676a8c5c440f6ab482f7b4b24f3259ab768d7b6523a0dcaeb12dc73e167a"
+    }
+  }
+}

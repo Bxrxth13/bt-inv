@@ -1,0 +1,76 @@
+import { ReactNode } from 'react';
+import { X, AlertTriangle } from 'lucide-react';
+import { Button } from './Field';
+
+interface ModalProps {
+  open: boolean;
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+  size?: 'sm' | 'md' | 'lg';
+}
+
+export function Modal({ open, title, onClose, children, size = 'md' }: ModalProps) {
+  if (!open) return null;
+  const width = size === 'sm' ? 'max-w-md' : size === 'lg' ? 'max-w-3xl' : 'max-w-xl';
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 backdrop-blur-sm p-4 sm:p-8">
+      <div
+        className={`relative w-full ${width} rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl shadow-black/40 my-auto`}
+      >
+        <div className="flex items-center justify-between border-b border-zinc-800 px-6 py-4">
+          <h3 className="text-lg font-semibold text-zinc-100">{title}</h3>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="px-6 py-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+interface ConfirmModalProps {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  confirmVariant?: 'danger' | 'primary';
+  onConfirm: () => void;
+  onClose: () => void;
+}
+
+export function ConfirmModal({
+  open,
+  title,
+  message,
+  confirmLabel = 'Delete',
+  confirmVariant = 'danger',
+  onConfirm,
+  onClose,
+}: ConfirmModalProps) {
+  if (!open) return null;
+  return (
+    <Modal open={open} title={title} onClose={onClose} size="sm">
+      <div className="space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-lg bg-red-500/10 text-red-400 shrink-0 mt-0.5">
+            <AlertTriangle size={18} />
+          </div>
+          <p className="text-sm text-zinc-300 leading-relaxed">{message}</p>
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant={confirmVariant} onClick={onConfirm}>
+            {confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
