@@ -47,6 +47,44 @@ export async function scanDocumentFile(
     try {
       const buffer = await fileOrBlob.arrayBuffer();
       rawText = await extractTextFromPdf(buffer);
+
+      // If native text extraction yielded very little text (e.g. scanned image-only PDF),
+      // render the first page to a canvas and OCR with Tesseract
+      if (
+        (!rawText || rawText.trim().length < 30) &&
+        typeof window !== 'undefined' &&
+        (window as any).pdfjsLib &&
+        (window as any).Tesseract
+      ) {
+        try {
+          const pdfjs = (window as any).pdfjsLib;
+          const loadingTask = pdfjs.getDocument({
+            data: new Uint8Array(buffer),
+            disableWorker: true,
+          });
+          const pdf = await Promise.race([
+            loadingTask.promise,
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('PDF.js render timeout')), 6000)),
+          ]);
+          if (pdf.numPages >= 1) {
+            const page = await pdf.getPage(1);
+            const viewport = page.getViewport({ scale: 2.0 });
+            const canvas = document.createElement('canvas');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              await page.render({ canvasContext: ctx, viewport }).promise;
+              const result = await (window as any).Tesseract.recognize(canvas, 'eng');
+              if (result?.data?.text && result.data.text.trim().length > 20) {
+                rawText = result.data.text;
+              }
+            }
+          }
+        } catch (ocrErr) {
+          console.warn('PDF OCR fallback failed:', ocrErr);
+        }
+      }
     } catch (err) {
       console.warn('PDF extraction failed:', err);
     }
@@ -112,47 +150,54 @@ export function parseInvoiceText(
   const addrMatch = headerText.match(/(?:H\.?O\.?|B\.?O\.?|Address|Works|Factory|Kasturi|Building|Street|Road)\s*[:\-]?\s*([^\n]+)/i);
   if (addrMatch) address = addrMatch[1].trim();
 
-  // Vendor Name from Header
-  for (const l of headerLines) {
-    if (
-      /^(?:tax\s+invoice|invoice|quotation|proforma|estimate|cash\s+bill|bill\s+of\s+supply|original|duplicate|delivery\s+challan|q\s*no|date|dated|gstin|phone|ph:|email|h\.?o\.?|b\.?o\.?|place\s+of)/i.test(
-        l
-      )
-    ) {
-      continue;
-    }
-    if (l.length >= 3 && /[a-zA-Z]/.test(l) && !/:/.test(l)) {
-      vendorName = l.replace(/^M\/s\.?\s*/i, '').trim();
-      break;
+  // Priority A: Explicit Vendor / Supplier label
+  const explicitVendorMatch = text.match(
+    /(?:Supplier(?:\s+Name)?|Vendor(?:\s+Name)?|Seller|Sold\s+By|Billed\s+By|Dispatched\s+From|Consignor)\s*[:\-]\s*([A-Za-z0-9&.,'\s\-()]{3,50})/i
+  );
+  if (explicitVendorMatch) {
+    const candidate = explicitVendorMatch[1].split(/\r?\n/)[0].trim();
+    if (candidate.length >= 3 && !/customer|buyer|client|recipient|billing/i.test(candidate)) {
+      vendorName = candidate;
     }
   }
 
-  // Check Footer Authorized Signatory: "For <Company Name>"
-  for (let i = lines.length - 1; i >= Math.max(0, lines.length - 15); i--) {
-    let l = lines[i];
-    // Remove "Thank you for your business" so it doesn't pollute the signatory line
-    l = l.replace(/thank\s+you\s+for\s+your\s+business/gi, '').trim();
-    // Match strict capitalized "For" or "FOR"
-    const forMatch = l.match(/\b(For|FOR)\s+([A-Za-z0-9&.,'\s\-()]{3,50})/);
-    if (forMatch) {
-      let candidate = forMatch[2]
-        .replace(/\b(?:authorized|signatory|signature|auth\.?|partner|proprietor|director|your\s+business)\b/gi, '')
-        .trim();
-      candidate = candidate.replace(/^for\s+/i, '').trim();
-      if (candidate.length > 3 && !/customer|buyer|client|recipient|billing/i.test(candidate)) {
-        if (!vendorName || vendorName.length < 4 || /industrial|supplier|invoice/i.test(vendorName)) {
-          vendorName = candidate;
-        } else if (
-          candidate.toLowerCase().includes(vendorName.toLowerCase()) ||
-          vendorName.toLowerCase().includes(candidate.toLowerCase())
-        ) {
-          if (candidate.toLowerCase().endsWith(vendorName.toLowerCase())) {
-            vendorName = candidate.slice(candidate.toLowerCase().lastIndexOf(vendorName.toLowerCase())).trim();
-          } else {
-            vendorName = candidate;
-          }
-        }
+  // Priority B: Header lines scanning (filter out invoice headings and buyer details)
+  if (!vendorName) {
+    for (const l of headerLines) {
+      if (
+        /^(?:tax\s+invoice|invoice|quotation|proforma|estimate|cash\s+bill|bill\s+of\s+supply|original|duplicate|triplicate|delivery\s+challan|delivery\s+note|purchase\s+order|q\s*no|date|dated|gstin|phone|ph:|email|h\.?o\.?|b\.?o\.?|place\s+of|state\s+code|reverse\s+charge|vehicle\s+no|e-way|bill\s+to|ship\s+to|buyer|consignee|customer)/i.test(
+          l
+        )
+      ) {
+        continue;
+      }
+      const cand = l.replace(/^(?:M\/s\.?|Messrs|To|For|FOR)\s+/i, '').trim();
+      if (
+        cand.length >= 3 &&
+        /[a-zA-Z]/.test(cand) &&
+        !/^(original|duplicate|triplicate|copy|tax|total|sub|amount|details)/i.test(cand)
+      ) {
+        vendorName = cand;
         break;
+      }
+    }
+  }
+
+  // Priority C: Check Footer Authorized Signatory: "For <Company Name>"
+  if (!vendorName || vendorName.length < 4 || /industrial|supplier|invoice/i.test(vendorName)) {
+    for (let i = lines.length - 1; i >= Math.max(0, lines.length - 15); i--) {
+      let l = lines[i].replace(/thank\s+you\s+for\s+your\s+business/gi, '').trim();
+      const forMatch = l.match(/\b(For|FOR)\s+([A-Za-z0-9&.,'\s\-()]{3,50})/);
+      if (forMatch) {
+        let candidate = forMatch[2]
+          .replace(/\b(?:authorized|signatory|signature|auth\.?|partner|proprietor|director|your\s+business)\b/gi, '')
+          .trim()
+          .replace(/^for\s+/i, '')
+          .trim();
+        if (candidate.length > 3 && !/customer|buyer|client|recipient|billing/i.test(candidate)) {
+          vendorName = candidate;
+          break;
+        }
       }
     }
   }
@@ -165,13 +210,21 @@ export function parseInvoiceText(
     .replace(/[\s\-_,.]+$/, '')
     .trim();
 
-  // Check if any existing vendor in database matches text
+  // Check if any existing vendor in database matches by GST or text
   if (availableVendors.length > 0) {
-    const matchedVendor = availableVendors.find((v) =>
-      text.toLowerCase().includes(v.name.toLowerCase().trim())
-    );
-    if (matchedVendor) {
-      vendorName = matchedVendor.name;
+    if (gstNumber) {
+      const gMatch = availableVendors.find(
+        (v) => v.gst_number && v.gst_number.trim().toUpperCase() === gstNumber.toUpperCase()
+      );
+      if (gMatch) vendorName = gMatch.name;
+    }
+    if (!vendorName || vendorName === 'Supplier') {
+      const matchedVendor = availableVendors.find((v) =>
+        text.toLowerCase().includes(v.name.toLowerCase().trim())
+      );
+      if (matchedVendor) {
+        vendorName = matchedVendor.name;
+      }
     }
   }
 
@@ -182,7 +235,7 @@ export function parseInvoiceText(
   // 2. EXTRACT BILL / INVOICE NUMBER
   let billNumber = '';
   const docNumRegex =
-    /(?:Q(?:TN)?\.?\s*NO\.?|QUOTATION\s*(?:NO\.?|NUMBER|#)|INVOICE\s*(?:NO\.?|NUMBER|#)|INV\.?\s*(?:NO\.?|NUMBER|#)|BILL\s*(?:NO\.?|NUMBER|#))\s*[:\-]?\s*([A-Za-z0-9\/\-_]{2,30})/i;
+    /(?:Q(?:TN)?\.?\s*(?:NO\.?|NUMBER|#)?|QUOTATION\s*(?:NO\.?|NUMBER|#)?|INVOICE\s*(?:NO\.?|NUMBER|#)?|INV\.?\s*(?:NO\.?|NUMBER|#)?|BILL\s*(?:NO\.?|NUMBER|#)?|CHALLAN\s*(?:NO\.?|NUMBER|#)?|DC\s*(?:NO\.?|NUMBER|#)?|REF\s*(?:NO\.?|NUMBER|#)?)\s*[:\-#]?\s*([A-Za-z0-9\/\-_]{2,30})/i;
   const numMatch = text.match(docNumRegex);
 
   if (numMatch && numMatch[1]) {
@@ -194,7 +247,7 @@ export function parseInvoiceText(
 
   // Check if Invoice No. is immediately followed on the next line by a number
   if (!billNumber) {
-    const invNoIdx = lines.findIndex((l) => /^(?:Invoice\s*No\.?|Bill\s*No\.?|Q\s*NO\.?)/i.test(l));
+    const invNoIdx = lines.findIndex((l) => /^(?:Invoice|Bill|Quotation|Q|Challan)\s*(?:No\.?|#|\/)?/i.test(l));
     if (invNoIdx !== -1 && invNoIdx + 1 < lines.length) {
       const nextCandidate = lines[invNoIdx + 1].trim().split(/\s+/)[0];
       if (/^[A-Za-z0-9\/\-_]{2,30}$/.test(nextCandidate) && !/^(to|for|date|dated|tax)$/i.test(nextCandidate)) {
@@ -213,7 +266,7 @@ export function parseInvoiceText(
     }
   }
 
-  // 3. EXTRACT DATE (Supports alphanumeric months like 13-Oct-26, 13-Oct-2026, 03/11/2026)
+  // 3. EXTRACT DATE (Supports ISO YYYY-MM-DD, alphanumeric months 13-Oct-26, and DD/MM/YYYY)
   let billDate = new Date().toISOString().slice(0, 10);
   const monthMap: Record<string, string> = {
     jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
@@ -221,44 +274,51 @@ export function parseInvoiceText(
   };
 
   const dateRegex =
-    /(?:Dated|Date|Invoice\s*Date|Bill\s*Date|Q\s*Date)\s*[:\-]?\s*(\d{1,2})[\/\-\.](\d{1,2}|[A-Za-z]{3,9})[\/\-\.](\d{2,4})/i;
+    /(?:Dated|Date|Invoice\s*Date|Bill\s*Date|Q\s*Date)\s*[:\-]?\s*(\d{1,4})[\/\-\.](\d{1,2}|[A-Za-z]{3,9})[\/\-\.](\d{2,4})/i;
   const dateMatch = text.match(dateRegex);
 
   if (dateMatch) {
-    let [, d, m, y] = dateMatch;
-    d = d.padStart(2, '0');
-    if (isNaN(Number(m))) {
-      m = monthMap[m.slice(0, 3).toLowerCase()] || '01';
+    let [, p1, p2, p3] = dateMatch;
+    if (p1.length === 4) {
+      // YYYY-MM-DD
+      const y = p1;
+      const m = isNaN(Number(p2)) ? (monthMap[p2.slice(0, 3).toLowerCase()] || '01') : p2.padStart(2, '0');
+      const d = p3.padStart(2, '0');
+      billDate = `${y}-${m}-${d}`;
     } else {
-      m = m.padStart(2, '0');
+      // DD/MM/YYYY
+      let d = p1.padStart(2, '0');
+      let m = isNaN(Number(p2)) ? (monthMap[p2.slice(0, 3).toLowerCase()] || '01') : p2.padStart(2, '0');
+      let y = p3.length === 2 ? '20' + p3 : p3;
+      billDate = `${y}-${m}-${d}`;
     }
-    if (y.length === 2) y = '20' + y;
-    billDate = `${y}-${m}-${d}`;
   } else {
-    // Standalone date fallback (must be reasonable year 2020-2035)
-    const plainDate = text.match(/\b([0-3]?\d)[\/\-]([0-1]?\d|[A-Za-z]{3,9})[\/\-](202\d|203\d|2\d)\b/);
-    if (plainDate) {
-      let [, d, m, y] = plainDate;
-      const numY = parseInt(y.length === 2 ? '20' + y : y, 10);
-      if (numY >= 2020 && numY <= 2035) {
-        d = d.padStart(2, '0');
-        if (isNaN(Number(m))) {
-          m = monthMap[m.slice(0, 3).toLowerCase()] || '01';
-        } else {
-          m = m.padStart(2, '0');
+    // Standalone ISO date YYYY-MM-DD
+    const isoMatch = text.match(/\b(202\d|203\d)[\/\-](0[1-9]|1[0-2])[\/\-](0[1-9]|[12]\d|3[01])\b/);
+    if (isoMatch) {
+      billDate = `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+    } else {
+      // Standalone date fallback (DD/MM/YYYY)
+      const plainDate = text.match(/\b([0-3]?\d)[\/\-]([0-1]?\d|[A-Za-z]{3,9})[\/\-](202\d|203\d|2\d)\b/);
+      if (plainDate) {
+        let [, d, m, y] = plainDate;
+        const numY = parseInt(y.length === 2 ? '20' + y : y, 10);
+        if (numY >= 2020 && numY <= 2035) {
+          d = d.padStart(2, '0');
+          m = isNaN(Number(m)) ? (monthMap[m.slice(0, 3).toLowerCase()] || '01') : m.padStart(2, '0');
+          if (y.length === 2) y = '20' + y;
+          billDate = `${y}-${m}-${d}`;
         }
-        if (y.length === 2) y = '20' + y;
-        billDate = `${y}-${m}-${d}`;
       }
     }
   }
 
-  // 4. EXTRACT LINE ITEMS (Mathematical verification: Qty * Rate == Amount)
+  // 4. EXTRACT LINE ITEMS (Mathematical verification: Qty * Rate == Amount with multi-line support)
   const lineItems: ExtractedLineItem[] = [];
 
   function checkLineCalculation(line: string) {
     const tokens = line.trim().split(/\s+/);
-    if (tokens.length < 3) return null;
+    if (tokens.length < 2) return null;
     const candidateNums = tokens.map((t) => {
       const clean = t.replace(/[₹,]/g, '');
       const val = parseFloat(clean);
@@ -276,9 +336,28 @@ export function parseInvoiceText(
         for (let aIdx = rIdx + 1; aIdx < candidateNums.length; aIdx++) {
           const aVal = candidateNums[aIdx];
           if (aVal === null || aVal <= 0) continue;
-          if (Math.abs(qVal * rVal - aVal) < 1.0) {
+
+          let isMatch = Math.abs(qVal * rVal - aVal) < 1.0;
+          if (!isMatch) {
+            for (const pct of [5, 10, 12, 15, 18, 20, 25, 28]) {
+              if (
+                Math.abs(qVal * rVal * (1 - pct / 100) - aVal) < 1.5 ||
+                Math.abs(qVal * rVal * (1 + pct / 100) - aVal) < 1.5
+              ) {
+                isMatch = true;
+                break;
+              }
+            }
+          }
+
+          if (isMatch) {
             let unit = 'pcs';
-            if (qIdx + 1 < tokens.length && /^(pcs|nos|box|boxes|kg|m|meter|units?|set|pack)$/i.test(tokens[qIdx + 1])) {
+            if (
+              qIdx + 1 < tokens.length &&
+              /^(pcs|nos|box|boxes|kg|kgs|m|meter|meters|units?|set|sets|pack|packs|pair|pairs|roll|rolls|bundle|bundles|ltr|litres?)$/i.test(
+                tokens[qIdx + 1]
+              )
+            ) {
               unit = tokens[qIdx + 1].toLowerCase();
             }
             return { qty: qVal, rate: rVal, amount: aVal, qtyIdx: qIdx, unit, tokens };
@@ -292,7 +371,11 @@ export function parseInvoiceText(
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
     // Ignore summary, tax and header lines
-    if (/^(?:Taxable\s+Value|Total|Sub\s*Total|CGST|SGST|IGST|Round|Amount\s+Chargeable|Company's|Customer|Buyer|State\s+Name)/i.test(l)) {
+    if (
+      /^(?:Taxable\s+Value|Total|Sub\s*Total|CGST|SGST|IGST|Round|Amount\s+Chargeable|Company's|Customer|Buyer|State\s+Name)/i.test(
+        l
+      )
+    ) {
       continue;
     }
 
@@ -305,10 +388,17 @@ export function parseInvoiceText(
 
       let description = descTokens.join(' ').trim();
 
+      // Look back to previous line if description on current line is missing/empty!
+      if (description.length <= 2 && i > 0) {
+        const prev = lines[i - 1].trim();
+        if (prev.length > 2 && !/^(?:Total|Sub|Tax|Invoice|Bill|Date|GST|HSN|S\.?No)/i.test(prev)) {
+          description = prev.replace(/^\d+[\.\-]?\s*/, '').trim();
+        }
+      }
+
       // Look ahead to capture multi-line descriptions (e.g. dimensions, food grade specs)
       while (i + 1 < lines.length) {
         const nextLine = lines[i + 1].trim();
-        // If next line itself is a line item or summary section, stop
         if (checkLineCalculation(nextLine)) break;
         if (/(?:Total|Sub\s*Total|Tax|IGST|CGST|SGST|Round|Thank|Terms|Bank|Authorized)/i.test(nextLine)) break;
 
@@ -319,7 +409,7 @@ export function parseInvoiceText(
           cleanContinuation = cleanContinuation.replace(unitMatch[0], '').trim();
         }
         cleanContinuation = cleanContinuation.replace(/\\/g, '').trim();
-        if (cleanContinuation) {
+        if (cleanContinuation && cleanContinuation.length > 1) {
           description += ' ' + cleanContinuation;
         }
         i++;

@@ -27,7 +27,7 @@ export async function extractTextFromPdf(arrayBuffer: ArrayBuffer): Promise<stri
 
       const pdf = await Promise.race([
         loadingTask.promise,
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('PDF.js timeout')), 2000)),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('PDF.js timeout')), 8000)),
       ]);
 
       let fullText = '';
@@ -143,7 +143,7 @@ function parsePdfContentStream(content: string): string[] {
   // Tokenize PDF text positioning and display operators:
   // Tm (text matrix), Td/TD (translation), T* (next line), Tj/TJ/'/" (show text), BT/ET (block)
   const regex =
-    /(?:\[(?:[^\]]*)\]\s*TJ|\((?:\\\(|\\\)|[^)])*\)\s*(?:Tj|'|")|<[0-9a-fA-F]+>\s*Tj|(?:\-?[\d\.]+)\s+(?:\-?[\d\.]+)\s+(?:\-?[\d\.]+)\s+(?:\-?[\d\.]+)\s+(?:\-?[\d\.]+)\s+(?:\-?[\d\.]+)\s+Tm|(?:\-?[\d\.]+)\s+(?:\-?[\d\.]+)\s+(?:Td|TD)|T\*|BT|ET)/g;
+    /(?:\[(?:[^\]]*)\]\s*TJ|\((?:\\\(|\\\)|[^)])*\)\s*(?:Tj|'|")|<[0-9a-fA-F\s]+>\s*(?:Tj|'|")|(?:\-?[\d\.]+)\s+(?:\-?[\d\.]+)\s+(?:\-?[\d\.]+)\s+(?:\-?[\d\.]+)\s+(?:\-?[\d\.]+)\s+(?:\-?[\d\.]+)\s+Tm|(?:\-?[\d\.]+)\s+(?:\-?[\d\.]+)\s+(?:Td|TD)|T\*|BT|ET)/g;
 
   let m;
   while ((m = regex.exec(content)) !== null) {
@@ -189,23 +189,14 @@ function parsePdfContentStream(content: string): string[] {
     let extractedText = '';
     if (chunk.endsWith('TJ')) {
       const inner = chunk.replace(/^\[|\]\s*TJ$/g, '');
-      const strMatches = inner.match(/\((?:\\\(|\\\)|[^)])*\)/g);
-      if (strMatches) {
-        extractedText = strMatches
-          .map((s) => cleanPdfString(s.slice(1, -1)))
-          .join('')
-          .trim();
-      }
+      extractedText = parseTJArray(inner);
     } else if (chunk.endsWith('Tj') || chunk.endsWith("'") || chunk.endsWith('"')) {
       const tjMatch = chunk.match(/\(((?:\\\(|\\\)|[^)])*)\)/);
       if (tjMatch) {
         extractedText = cleanPdfString(tjMatch[1]).trim();
       } else if (chunk.startsWith('<')) {
-        const hex = chunk.slice(1, chunk.indexOf('>'));
-        for (let i = 0; i < hex.length; i += 2) {
-          extractedText += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
-        }
-        extractedText = extractedText.trim();
+        const hex = chunk.slice(1, chunk.indexOf('>')).replace(/\s+/g, '');
+        extractedText = decodePdfHex(hex);
       }
       if (chunk.endsWith("'") || chunk.endsWith('"')) {
         cursorY -= leading;
@@ -247,8 +238,48 @@ function parsePdfContentStream(content: string): string[] {
   return lines;
 }
 
+function parseTJArray(inner: string): string {
+  const itemRegex = /\((?:\\\(|\\\)|[^)])*\)|<[0-9a-fA-F\s]+>|(?:\-?[\d\.]+)/g;
+  let text = '';
+  let m: RegExpExecArray | null;
+  while ((m = itemRegex.exec(inner)) !== null) {
+    const token = m[0];
+    if (token.startsWith('(')) {
+      text += cleanPdfString(token.slice(1, -1));
+    } else if (token.startsWith('<')) {
+      const hex = token.slice(1, -1).replace(/\s+/g, '');
+      text += decodePdfHex(hex);
+    } else {
+      const num = parseFloat(token);
+      // In PDF, a negative kerning offset of around -80 to -1000 represents a space between words
+      if (!isNaN(num) && num < -80) {
+        if (!text.endsWith(' ')) text += ' ';
+      }
+    }
+  }
+  return text.trim();
+}
+
+function decodePdfHex(hex: string): string {
+  let decoded = '';
+  if (hex.length >= 4 && hex.length % 4 === 0) {
+    for (let i = 0; i < hex.length; i += 4) {
+      const code = parseInt(hex.substr(i, 4), 16);
+      if (code >= 32 && code <= 126) decoded += String.fromCharCode(code);
+      else if (code === 10 || code === 13) decoded += '\n';
+      else if (code > 0) decoded += String.fromCharCode(code);
+    }
+  } else {
+    for (let i = 0; i < hex.length; i += 2) {
+      decoded += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+    }
+  }
+  return decoded.trim();
+}
+
 function cleanPdfString(str: string): string {
   return str
+    .replace(/\\([0-7]{1,3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8)))
     .replace(/\\([()\\])/g, '$1')
     .replace(/\\n/g, '\n')
     .replace(/\\r/g, '\r')
