@@ -130,22 +130,23 @@ export default function App() {
       {/* Main */}
       <div className="lg:pl-60">
         {/* Top bar matching reference screenshot */}
-        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-zinc-800/80 bg-zinc-950/80 px-4 backdrop-blur sm:px-6">
-          <div className="flex items-center gap-3">
+        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-zinc-800/80 bg-zinc-950/80 px-3 sm:px-6 backdrop-blur">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               onClick={() => setMobileOpen(true)}
-              className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 lg:hidden"
+              className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 lg:hidden shrink-0 cursor-pointer"
+              title="Open navigation menu"
             >
               <Menu size={20} />
             </button>
-            <current.icon size={18} className="text-amber-500" />
-            <span className="font-semibold text-zinc-100">{current.label}</span>
+            <current.icon size={18} className="text-amber-500 shrink-0" />
+            <span className="font-semibold text-zinc-100 truncate text-sm sm:text-base">{current.label}</span>
           </div>
 
           {/* Right Header Status Pills */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             {/* Live date badge */}
-            <div className="flex items-center gap-1.5 rounded-full border border-zinc-800 bg-zinc-900/80 px-3 py-1 text-xs text-zinc-400">
+            <div className="hidden md:flex items-center gap-1.5 rounded-full border border-zinc-800 bg-zinc-900/80 px-3 py-1 text-xs text-zinc-400">
               <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
               <span>{currentDateFormatted}</span>
             </div>
@@ -153,25 +154,29 @@ export default function App() {
             {/* Low stock badge */}
             <button
               onClick={() => navigate('live-stock')}
-              className="flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-400 hover:bg-amber-500/20 transition-colors"
+              className="flex items-center gap-1 sm:gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 sm:px-3 py-1 text-xs font-medium text-amber-400 hover:bg-amber-500/20 transition-colors cursor-pointer"
               title="Click to view low stock items"
             >
-              <AlertTriangle size={13} />
-              <span>{lowStockCount} low stock</span>
+              <AlertTriangle size={13} className="shrink-0" />
+              <span>
+                {lowStockCount} <span className="hidden sm:inline">low stock</span><span className="sm:hidden">low</span>
+              </span>
             </button>
 
             {/* Total payable badge */}
             <button
               onClick={() => navigate('payments')}
-              className="flex items-center gap-1.5 rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-xs font-medium text-zinc-300 hover:border-zinc-700 hover:text-zinc-100 transition-colors"
+              className="flex items-center gap-1 sm:gap-1.5 rounded-full border border-zinc-800 bg-zinc-900 px-2 sm:px-3 py-1 text-xs font-medium text-zinc-300 hover:border-zinc-700 hover:text-zinc-100 transition-colors cursor-pointer"
               title="Click to view pending payments"
             >
-              <span className="font-mono">₹ {payableTotal.toLocaleString('en-IN')} payable</span>
+              <span className="font-mono">
+                ₹ {payableTotal.toLocaleString('en-IN')}<span className="hidden sm:inline"> payable</span>
+              </span>
             </button>
           </div>
         </header>
 
-        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+        <main className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-8">
           {page === 'dashboard' && <Dashboard onNavigate={navigate} />}
           {page === 'items' && <ItemsPage />}
           {page === 'material-entry' && <MaterialEntryPage />}
@@ -230,11 +235,10 @@ function SidebarContent({ current, onNavigate, onClose }: SidebarContentProps) {
                     <button
                       key={item.key}
                       onClick={() => onNavigate(item.key)}
-                      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-                        active
-                          ? 'bg-amber-500/15 text-amber-400 font-semibold'
-                          : 'text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200'
-                      }`}
+                      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${active
+                        ? 'bg-amber-500/15 text-amber-400 font-semibold'
+                        : 'text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200'
+                        }`}
                     >
                       <Icon size={16} className={active ? 'text-amber-400' : 'text-zinc-500'} />
                       {item.label}

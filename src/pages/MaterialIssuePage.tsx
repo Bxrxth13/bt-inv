@@ -116,14 +116,14 @@ export function MaterialIssuePage() {
                   {selectedItem.is_low_stock && <Badge color="amber">Low stock</Badge>}
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <TextField label="Quantity *" type="number" min={1} max={maxQty || undefined} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} required />
                 <TextField label="Date" type="date" value={movementDate} onChange={(e) => setMovementDate(e.target.value)} />
               </div>
               <TextField label="Issued To *" value={issuedTo} onChange={(e) => setIssuedTo(e.target.value)} required placeholder="Staff name / department" />
               <TextAreaField label="Notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
               {error && <p className="text-sm text-red-400">{error}</p>}
-              <Button type="submit" disabled={saving} className="w-full" variant="secondary"><Plus size={16} /> {saving ? 'Recording...' : 'Record Issue'}</Button>
+              <Button type="submit" disabled={saving} className="w-full cursor-pointer" variant="secondary"><Plus size={16} /> {saving ? 'Recording...' : 'Record Issue'}</Button>
             </form>
           </div>
         </div>
@@ -141,7 +141,7 @@ export function MaterialIssuePage() {
               <button
                 type="button"
                 onClick={() => setSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-200"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-200 cursor-pointer"
                 title="Clear search"
               >
                 <X size={14} />
@@ -153,8 +153,8 @@ export function MaterialIssuePage() {
           ) : filtered.length === 0 ? (
             <EmptyState icon={<ArrowUpFromLine size={36} />} title="No issues recorded" subtitle="Use the form to record material issued to staff" />
           ) : (
-            <div className="overflow-hidden rounded-xl border border-zinc-800">
-              <table className="w-full text-left text-sm">
+            <div className="overflow-x-auto rounded-xl border border-zinc-800">
+              <table className="w-full min-w-[500px] text-left text-sm">
                 <thead className="bg-zinc-900/60 text-xs uppercase tracking-wider text-zinc-500">
                   <tr>
                     <th className="px-4 py-3 font-medium">Date</th>

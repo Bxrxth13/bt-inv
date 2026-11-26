@@ -512,22 +512,22 @@ export function BillsPage() {
       />
 
       {/* Top Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between border-b border-zinc-800/80 pb-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between border-b border-zinc-800/80 pb-4 sm:pb-5">
         <div>
           <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-400 border border-amber-500/20 mb-2">
             <Sparkles size={12} className="text-amber-400" /> AI Bill Scanner &middot; OCR &amp; Parser
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-100">Upload &amp; Scan Vendor Bill</h1>
-          <p className="mt-1 text-sm text-zinc-400 max-w-3xl leading-relaxed">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-100">Upload &amp; Scan Vendor Bill</h1>
+          <p className="mt-1 text-xs sm:text-sm text-zinc-400 max-w-3xl leading-relaxed">
             Upload the vendor's invoice (photo or PDF). AI reads the vendor, bill number, dates, every line item and GST exactly as printed. Review, correct if needed, and post — stock and payment reminder are created together.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
           {activeBill && (
             <button
               onClick={() => setActiveBillId(null)}
-              className="rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+              className="rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 cursor-pointer"
             >
               All Bills ({bills.length})
             </button>
@@ -535,7 +535,7 @@ export function BillsPage() {
           <button
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
-            className="inline-flex items-center gap-2 rounded-lg bg-zinc-800 border border-zinc-700 px-3.5 py-2 text-xs font-semibold text-zinc-100 hover:bg-zinc-700 shadow-sm transition-colors"
+            className="inline-flex items-center gap-2 rounded-lg bg-zinc-800 border border-zinc-700 px-3.5 py-2 text-xs font-semibold text-zinc-100 hover:bg-zinc-700 shadow-sm transition-colors cursor-pointer"
           >
             <Upload size={14} className="text-amber-400" />
             {uploading ? 'Processing...' : 'New Bill'}
@@ -1234,14 +1234,14 @@ function ScannerDetailingView({
       {/* 1. DOCUMENT VIEWER CARD */}
       <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-xl">
         {/* Viewer Header / Toolbar */}
-        <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900/90 px-4 py-2.5">
-          <div className="flex items-center gap-2 min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-900/90 px-3 sm:px-4 py-2 sm:py-2.5">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 max-w-[55%] sm:max-w-none">
             <FileText size={15} className="text-amber-400 shrink-0" />
             <span className="font-mono text-xs font-semibold text-zinc-100 truncate">{bill.file_name}</span>
-            <span className="rounded bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400 border border-zinc-700">1 / 1</span>
+            <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400 border border-zinc-700 shrink-0">1 / 1</span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             <button
               type="button"
               onClick={() => setZoom((z) => Math.max(50, z - 15))}
@@ -1250,7 +1250,7 @@ function ScannerDetailingView({
             >
               <ZoomOut size={14} />
             </button>
-            <span className="text-[11px] font-mono text-zinc-400">{zoom}%</span>
+            <span className="text-[10px] sm:text-[11px] font-mono text-zinc-400">{zoom}%</span>
             <button
               type="button"
               onClick={() => setZoom((z) => Math.min(200, z + 15))}
@@ -1264,7 +1264,7 @@ function ScannerDetailingView({
               <button
                 type="button"
                 onClick={handleOpenInNewTab}
-                className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-emerald-400 ml-1 cursor-pointer"
+                className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-emerald-400 ml-0.5 cursor-pointer"
                 title="Open document in new tab"
               >
                 <ExternalLink size={14} />
@@ -1275,16 +1275,16 @@ function ScannerDetailingView({
               type="button"
               onClick={onRescan}
               disabled={isScanning}
-              className="rounded bg-zinc-800 border border-zinc-700 px-2 py-1 text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1 ml-1 disabled:opacity-50 cursor-pointer"
+              className="rounded bg-zinc-800 border border-zinc-700 px-2 py-1 text-[11px] sm:text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1 ml-0.5 disabled:opacity-50 cursor-pointer"
               title="Re-run AI extraction"
             >
-              <Sparkles size={12} /> {isScanning ? 'Scanning...' : 'Re-scan'}
+              <Sparkles size={12} /> <span className="hidden xs:inline sm:inline">{isScanning ? 'Scanning...' : 'Re-scan'}</span>
             </button>
 
             <button
               type="button"
               onClick={onDelete}
-              className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-red-400 ml-1 cursor-pointer"
+              className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-red-400 ml-0.5 cursor-pointer"
               title="Delete bill"
             >
               <Trash2 size={14} />
@@ -1293,7 +1293,7 @@ function ScannerDetailingView({
             <button
               type="button"
               onClick={onClose}
-              className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 ml-2 border-l border-zinc-700 pl-2 cursor-pointer"
+              className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 ml-1 border-l border-zinc-700 pl-1.5 cursor-pointer"
               title="Close detailing"
             >
               <X size={16} />
@@ -1302,7 +1302,7 @@ function ScannerDetailingView({
         </div>
 
         {/* Viewer Content */}
-        <div className="flex h-[450px] w-full items-start justify-center overflow-auto bg-zinc-900/60 p-4">
+        <div className="flex h-[300px] sm:h-[450px] w-full items-start justify-center overflow-auto bg-zinc-900/60 p-2 sm:p-4">
           {fileUrl ? (
             isPdf ? (
               <div
@@ -1348,7 +1348,7 @@ function ScannerDetailingView({
 
       {/* 2. EXTRACTION STATUS PILL BAR */}
       <div
-        className={`rounded-xl border px-4 py-3 flex items-center justify-between text-xs ${
+        className={`rounded-xl border px-3 sm:px-4 py-2.5 sm:py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs ${
           isScanning
             ? 'border-amber-500/30 bg-amber-500/10 text-amber-200 animate-pulse'
             : isAlreadyProcessed
@@ -1380,14 +1380,14 @@ function ScannerDetailingView({
             </span>
           )}
         </div>
-        <div className="hidden sm:block text-[11px] text-zinc-300 font-mono">
+        <div className="text-[11px] text-zinc-300 font-mono">
           Taxable: ₹{subtotal.toLocaleString('en-IN')} | GST: ₹{taxAmount.toLocaleString('en-IN')}
         </div>
       </div>
 
       {/* Discrepancy warning banner */}
       {hasDiscrepancy && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-300 flex items-center gap-2">
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 sm:px-4 py-2.5 text-xs text-amber-300 flex items-center gap-2">
           <AlertTriangle size={15} className="shrink-0 text-amber-400" />
           <span>
             Line amounts add up to <strong className="font-mono">₹{linesSum.toLocaleString('en-IN')}</strong> but bill subtotal is{' '}
@@ -1397,13 +1397,13 @@ function ScannerDetailingView({
       )}
 
       {/* 3. VENDOR & BILL DETAILS CARD */}
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 space-y-3.5">
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-3.5 sm:p-4 space-y-3.5">
         <div className="text-xs font-bold uppercase tracking-wider text-zinc-400">
           Vendor &amp; Bill Details
         </div>
 
         {/* Row 1: Vendor, Bill No, Bill Date */}
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
             <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
               Vendor *
@@ -1449,8 +1449,8 @@ function ScannerDetailingView({
         </div>
 
         {/* Row 2: Vendor profile fields */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5 border-t border-zinc-800/80 pt-3">
-          <div className="sm:col-span-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3 border-t border-zinc-800/80 pt-3">
+          <div>
             <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
               New Vendor Name
             </label>
@@ -1463,7 +1463,7 @@ function ScannerDetailingView({
             />
           </div>
 
-          <div className="sm:col-span-1">
+          <div>
             <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
               GSTIN
             </label>
@@ -1476,7 +1476,7 @@ function ScannerDetailingView({
             />
           </div>
 
-          <div className="sm:col-span-1">
+          <div>
             <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
               Phone
             </label>
@@ -1489,7 +1489,7 @@ function ScannerDetailingView({
             />
           </div>
 
-          <div className="sm:col-span-1">
+          <div>
             <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
               Address
             </label>
@@ -1502,7 +1502,7 @@ function ScannerDetailingView({
             />
           </div>
 
-          <div className="sm:col-span-1">
+          <div>
             <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
               Credit Days
             </label>
@@ -1578,52 +1578,55 @@ function ScannerDetailingView({
                     </select>
                   </div>
 
-                  {/* Quantity */}
-                  <div className="flex items-center gap-2 lg:col-span-2">
-                    <label className="text-[10px] text-zinc-500 uppercase tracking-wider lg:hidden">Qty:</label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={it.qty}
-                      onChange={(e) => handleItemFieldChange(idx, 'qty', e.target.value)}
-                      placeholder="Qty"
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-right font-mono text-zinc-100 focus:border-amber-500 focus:outline-none"
-                    />
-                  </div>
+                  {/* Quantity, Unit, Rate in a 3-col grid on mobile, directly in 12-col on lg */}
+                  <div className="grid grid-cols-3 gap-2 lg:contents">
+                    {/* Quantity */}
+                    <div className="flex items-center gap-1.5 lg:col-span-2">
+                      <label className="text-[10px] text-zinc-500 uppercase tracking-wider lg:hidden">Qty:</label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={it.qty}
+                        onChange={(e) => handleItemFieldChange(idx, 'qty', e.target.value)}
+                        placeholder="Qty"
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-right font-mono text-zinc-100 focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
 
-                  {/* Unit */}
-                  <div className="flex items-center gap-2 lg:col-span-1">
-                    <label className="text-[10px] text-zinc-500 uppercase tracking-wider lg:hidden">Unit:</label>
-                    <input
-                      type="text"
-                      value={it.unit || 'pc'}
-                      onChange={(e) => handleItemFieldChange(idx, 'unit', e.target.value)}
-                      placeholder="Unit"
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-center font-mono text-zinc-300 focus:border-amber-500 focus:outline-none"
-                    />
-                  </div>
+                    {/* Unit */}
+                    <div className="flex items-center gap-1.5 lg:col-span-1">
+                      <label className="text-[10px] text-zinc-500 uppercase tracking-wider lg:hidden">Unit:</label>
+                      <input
+                        type="text"
+                        value={it.unit || 'pc'}
+                        onChange={(e) => handleItemFieldChange(idx, 'unit', e.target.value)}
+                        placeholder="Unit"
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-center font-mono text-zinc-300 focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
 
-                  {/* Rate */}
-                  <div className="flex items-center gap-2 lg:col-span-2">
-                    <label className="text-[10px] text-zinc-500 uppercase tracking-wider lg:hidden">Rate:</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={it.rate}
-                      onChange={(e) => handleItemFieldChange(idx, 'rate', e.target.value)}
-                      placeholder="Rate"
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-right font-mono text-zinc-100 focus:border-amber-500 focus:outline-none"
-                    />
+                    {/* Rate */}
+                    <div className="flex items-center gap-1.5 lg:col-span-2">
+                      <label className="text-[10px] text-zinc-500 uppercase tracking-wider lg:hidden">Rate:</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={it.rate}
+                        onChange={(e) => handleItemFieldChange(idx, 'rate', e.target.value)}
+                        placeholder="Rate"
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-right font-mono text-zinc-100 focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
                   </div>
 
                   {/* Amount & Delete Button */}
-                  <div className="flex items-center justify-between lg:col-span-2 lg:justify-end gap-3">
+                  <div className="flex items-center justify-between lg:col-span-2 lg:justify-end gap-3 pt-1.5 lg:pt-0 border-t border-zinc-800/60 lg:border-t-0">
                     <div className="font-mono text-xs font-bold text-zinc-100">
                       ₹{it.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </div>
                     <button
                       onClick={() => handleDeleteLine(idx)}
-                      className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-red-400 transition-colors"
+                      className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-red-400 transition-colors cursor-pointer"
                       title="Delete line item"
                     >
                       <Trash2 size={15} />
@@ -1633,8 +1636,8 @@ function ScannerDetailingView({
 
                 {/* Sub-inputs for item catalog details */}
                 {it.matched_item_id === '__new__' && (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 rounded-lg border border-zinc-800/80 bg-zinc-900/30 p-2 text-xs">
-                    <div className="sm:col-span-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2 rounded-lg border border-zinc-800/80 bg-zinc-900/30 p-2 text-xs">
+                    <div className="sm:col-span-2 md:col-span-2">
                       <input
                         type="text"
                         value={it.name}
@@ -1687,7 +1690,7 @@ function ScannerDetailingView({
       {/* 5. BOTTOM SPLIT GRID */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Left Column: Payment Due Date, Checkbox, Notes */}
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 space-y-4">
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-3.5 sm:p-4 space-y-4">
           <div className="text-xs font-bold uppercase tracking-wider text-zinc-400">
             Payment &amp; Terms
           </div>
@@ -1732,7 +1735,7 @@ function ScannerDetailingView({
         </div>
 
         {/* Right Column: Financials & Confirm/Post CTA */}
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 flex flex-col justify-between">
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-3.5 sm:p-4 flex flex-col justify-between">
           <div className="space-y-2.5">
             <div className="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
               <Receipt size={14} className="text-amber-400" />
@@ -1740,7 +1743,7 @@ function ScannerDetailingView({
             </div>
 
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 space-y-2.5 text-xs">
-              <div className="flex items-center justify-between text-zinc-400">
+              <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-1.5 text-zinc-400">
                 <span className="font-medium">Subtotal (taxable)</span>
                 <div className="flex items-center gap-1.5">
                   <span className="text-zinc-500 font-mono">₹</span>
@@ -1758,7 +1761,7 @@ function ScannerDetailingView({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-zinc-400">
+              <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-1.5 text-zinc-400">
                 <span className="font-medium flex items-center gap-1">
                   <span>GST amount</span>
                   <span className="text-[10px] text-zinc-500 font-mono">(CGST+SGST+IGST)</span>
@@ -1787,7 +1790,7 @@ function ScannerDetailingView({
               </div>
 
               {/* Editable GST breakdown */}
-              <div className="grid grid-cols-3 gap-2 pt-1 border-t border-zinc-800/60 text-[11px]">
+              <div className="grid grid-cols-3 gap-1.5 sm:gap-2 pt-1 border-t border-zinc-800/60 text-[11px]">
                 <div>
                   <span className="text-[10px] text-zinc-500 block">CGST (₹)</span>
                   <input
@@ -1806,7 +1809,7 @@ function ScannerDetailingView({
                       setTaxAmount(t);
                       setAmount(Math.round((subtotal + t + rounding) * 100) / 100);
                     }}
-                    className="w-full rounded bg-zinc-900 border border-zinc-700/80 px-2 py-0.5 text-zinc-300 font-mono text-right focus:outline-none focus:border-amber-500"
+                    className="w-full rounded bg-zinc-900 border border-zinc-700/80 px-1.5 sm:px-2 py-0.5 text-zinc-300 font-mono text-right text-xs focus:outline-none focus:border-amber-500"
                   />
                 </div>
                 <div>
@@ -1827,7 +1830,7 @@ function ScannerDetailingView({
                       setTaxAmount(t);
                       setAmount(Math.round((subtotal + t + rounding) * 100) / 100);
                     }}
-                    className="w-full rounded bg-zinc-900 border border-zinc-700/80 px-2 py-0.5 text-zinc-300 font-mono text-right focus:outline-none focus:border-amber-500"
+                    className="w-full rounded bg-zinc-900 border border-zinc-700/80 px-1.5 sm:px-2 py-0.5 text-zinc-300 font-mono text-right text-xs focus:outline-none focus:border-amber-500"
                   />
                 </div>
                 <div>
@@ -1843,12 +1846,12 @@ function ScannerDetailingView({
                       setTaxAmount(t);
                       setAmount(Math.round((subtotal + t + rounding) * 100) / 100);
                     }}
-                    className="w-full rounded bg-zinc-900 border border-zinc-700/80 px-2 py-0.5 text-zinc-300 font-mono text-right focus:outline-none focus:border-amber-500"
+                    className="w-full rounded bg-zinc-900 border border-zinc-700/80 px-1.5 sm:px-2 py-0.5 text-zinc-300 font-mono text-right text-xs focus:outline-none focus:border-amber-500"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-zinc-400 pt-1">
+              <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-1.5 text-zinc-400 pt-1">
                 <span>Freight / round-off / other</span>
                 <div className="flex items-center gap-1.5">
                   <span className="text-zinc-500 font-mono">₹</span>

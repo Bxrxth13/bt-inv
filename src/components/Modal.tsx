@@ -14,20 +14,21 @@ export function Modal({ open, title, onClose, children, size = 'md' }: ModalProp
   if (!open) return null;
   const width = size === 'sm' ? 'max-w-md' : size === 'lg' ? 'max-w-3xl' : 'max-w-xl';
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 backdrop-blur-sm p-4 sm:p-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 backdrop-blur-sm p-3 sm:p-6 md:p-8">
       <div
-        className={`relative w-full ${width} rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl shadow-black/40 my-auto`}
+        className={`relative w-full ${width} max-h-[92vh] flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl shadow-black/40 my-auto`}
       >
-        <div className="flex items-center justify-between border-b border-zinc-800 px-6 py-4">
-          <h3 className="text-lg font-semibold text-zinc-100">{title}</h3>
+        <div className="flex items-center justify-between border-b border-zinc-800 px-4 sm:px-6 py-3.5 sm:py-4 shrink-0">
+          <h3 className="text-base sm:text-lg font-semibold text-zinc-100 truncate pr-2">{title}</h3>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+            className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100 shrink-0 cursor-pointer"
+            title="Close modal"
           >
             <X size={18} />
           </button>
         </div>
-        <div className="px-6 py-5">{children}</div>
+        <div className="px-4 sm:px-6 py-4 sm:py-5 overflow-y-auto">{children}</div>
       </div>
     </div>
   );

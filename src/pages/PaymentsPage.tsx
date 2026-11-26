@@ -68,12 +68,12 @@ export function PaymentsPage() {
         action={<Button onClick={() => setShowForm(true)}><Plus size={16} /> Add Reminder</Button>}
       />
 
-      <div className="mb-4 flex gap-2">
+      <div className="mb-4 flex flex-wrap gap-2">
         {(['pending', 'overdue', 'paid', 'all'] as const).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium capitalize transition-colors ${filter === f ? 'bg-emerald-600/15 text-emerald-400 ring-1 ring-emerald-500/30' : 'border border-zinc-700 bg-zinc-800/40 text-zinc-400 hover:text-zinc-100'}`}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium capitalize transition-colors cursor-pointer ${filter === f ? 'bg-emerald-600/15 text-emerald-400 ring-1 ring-emerald-500/30' : 'border border-zinc-700 bg-zinc-800/40 text-zinc-400 hover:text-zinc-100'}`}
           >
             {f}
           </button>
@@ -89,9 +89,9 @@ export function PaymentsPage() {
           {filtered.map((p) => {
             const overdue = isOverdue(p);
             return (
-              <div key={p.id} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${p.paid ? 'border-zinc-800 bg-zinc-900/20 opacity-60' : overdue ? 'border-red-500/30 bg-red-500/[0.04]' : 'border-zinc-800 bg-zinc-900/40'}`}>
+              <div key={p.id} className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border p-3.5 sm:p-4 ${p.paid ? 'border-zinc-800 bg-zinc-900/20 opacity-60' : overdue ? 'border-red-500/30 bg-red-500/[0.04]' : 'border-zinc-800 bg-zinc-900/40'}`}>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                     <span className="font-medium text-zinc-100">{p.vendor?.name ?? 'Vendor'}</span>
                     {p.bill_number && <Badge color="zinc">{p.bill_number}</Badge>}
                     {p.paid ? <Badge color="emerald"><Check size={11} /> Paid</Badge> : overdue ? <Badge color="red"><AlertTriangle size={11} /> Overdue</Badge> : <Badge color="amber">Pending</Badge>}
@@ -101,10 +101,12 @@ export function PaymentsPage() {
                     {p.notes ? ` · ${p.notes}` : ''}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-lg font-semibold text-zinc-100">₹{Number(p.amount).toLocaleString('en-IN')}</span>
-                  {!p.paid && <button onClick={() => markPaid(p)} className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-emerald-400" title="Mark paid"><Check size={16} /></button>}
-                  <button onClick={() => deletePayment(p.id)} className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-red-400 transition-colors" title="Delete reminder"><Trash2 size={15} /></button>
+                <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t border-zinc-800/60 sm:border-t-0">
+                  <span className="text-base sm:text-lg font-semibold text-zinc-100 font-mono">₹{Number(p.amount).toLocaleString('en-IN')}</span>
+                  <div className="flex items-center gap-1">
+                    {!p.paid && <button onClick={() => markPaid(p)} className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-emerald-400 cursor-pointer" title="Mark paid"><Check size={16} /></button>}
+                    <button onClick={() => deletePayment(p.id)} className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-red-400 transition-colors cursor-pointer" title="Delete reminder"><Trash2 size={15} /></button>
+                  </div>
                 </div>
               </div>
             );
@@ -156,14 +158,14 @@ function PaymentForm({ vendors, onClose, onSaved }: { vendors: Vendor[]; onClose
           <option value="">Select vendor...</option>
           {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
         </SelectField>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <TextField label="Amount (₹) *" type="number" step="0.01" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} required />
           <TextField label="Due Date *" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
         </div>
         <TextField label="Bill Number" value={billNumber} onChange={(e) => setBillNumber(e.target.value)} />
         <TextAreaField label="Notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
         {error && <p className="text-sm text-red-400">{error}</p>}
-        <div className="flex items-center justify-between pt-2">
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
           {(vendorId || amount || billNumber || notes) ? (
             <button
               type="button"
@@ -173,7 +175,7 @@ function PaymentForm({ vendors, onClose, onSaved }: { vendors: Vendor[]; onClose
                 setBillNumber('');
                 setNotes('');
               }}
-              className="text-xs text-zinc-500 hover:text-red-400 flex items-center gap-1 transition-colors"
+              className="text-xs text-zinc-500 hover:text-red-400 flex items-center gap-1 transition-colors cursor-pointer"
               title="Clear all fields"
             >
               <Trash2 size={13} /> Clear form
@@ -181,9 +183,9 @@ function PaymentForm({ vendors, onClose, onSaved }: { vendors: Vendor[]; onClose
           ) : (
             <div />
           )}
-          <div className="flex gap-2">
-            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Add Reminder'}</Button>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button type="button" variant="secondary" onClick={onClose} className="flex-1 sm:flex-none cursor-pointer">Cancel</Button>
+            <Button type="submit" disabled={saving} className="flex-1 sm:flex-none cursor-pointer">{saving ? 'Saving...' : 'Add Reminder'}</Button>
           </div>
         </div>
       </form>

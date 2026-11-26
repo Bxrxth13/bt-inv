@@ -90,8 +90,8 @@ export function ItemsPage() {
       ) : filtered.length === 0 ? (
         <EmptyState icon={<Package size={36} />} title="No items yet" subtitle="Add your first material to start tracking stock" />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-zinc-800">
-          <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto rounded-xl border border-zinc-800">
+          <table className="w-full min-w-[580px] text-left text-sm">
             <thead className="bg-zinc-900/60 text-xs uppercase tracking-wider text-zinc-500">
               <tr>
                 <th className="px-4 py-3 font-medium">Name</th>
@@ -190,11 +190,11 @@ function ItemForm({
     <Modal open title={item ? 'Edit Item' : 'Add Item'} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <TextField label="Name *" value={name} onChange={(e) => setName(e.target.value)} required placeholder="e.g. M8 Hex Bolt" />
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <TextField label="Part Number" value={partNumber} onChange={(e) => setPartNumber(e.target.value)} placeholder="SKU / code" />
           <TextField label="Unit *" value={unit} onChange={(e) => setUnit(e.target.value)} required placeholder="pcs, kg, m, box" />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <SelectField label="Category" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
             <option value="">— None —</option>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -203,7 +203,7 @@ function ItemForm({
         </div>
         <TextAreaField label="Notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
         {error && <p className="text-sm text-red-400">{error}</p>}
-        <div className="flex items-center justify-between pt-2">
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
           {item ? (
             <Button
               type="button"
@@ -213,15 +213,16 @@ function ItemForm({
                 onDelete(item.id);
               }}
               title="Delete this item"
+              className="w-full sm:w-auto cursor-pointer"
             >
               <Trash2 size={15} /> Delete Item
             </Button>
           ) : (
             <div />
           )}
-          <div className="flex gap-2">
-            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={saving}>{saving ? 'Saving...' : item ? 'Save Changes' : 'Add Item'}</Button>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button type="button" variant="secondary" onClick={onClose} className="flex-1 sm:flex-none cursor-pointer">Cancel</Button>
+            <Button type="submit" disabled={saving} className="flex-1 sm:flex-none cursor-pointer">{saving ? 'Saving...' : item ? 'Save Changes' : 'Add Item'}</Button>
           </div>
         </div>
       </form>

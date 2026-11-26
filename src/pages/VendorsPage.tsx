@@ -181,18 +181,18 @@ function VendorForm({
     <Modal open title={vendor ? 'Edit Vendor' : 'Add Vendor'} onClose={onClose} size="lg">
       <form onSubmit={submit} className="space-y-4">
         <TextField label="Name *" value={name} onChange={(e) => setName(e.target.value)} required />
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <TextField label="Contact Person" value={contact} onChange={(e) => setContact(e.target.value)} />
           <TextField label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <TextField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           <TextField label="GST Number" value={gst} onChange={(e) => setGst(e.target.value)} />
         </div>
         <TextAreaField label="Address" rows={2} value={address} onChange={(e) => setAddress(e.target.value)} />
         <TextAreaField label="Notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
         {error && <p className="text-sm text-red-400">{error}</p>}
-        <div className="flex items-center justify-between pt-2">
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
           {vendor ? (
             <Button
               type="button"
@@ -202,15 +202,16 @@ function VendorForm({
                 onDelete(vendor.id);
               }}
               title="Delete this vendor"
+              className="w-full sm:w-auto cursor-pointer"
             >
               <Trash2 size={15} /> Delete Vendor
             </Button>
           ) : (
             <div />
           )}
-          <div className="flex gap-2">
-            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={saving}>{saving ? 'Saving...' : vendor ? 'Save Changes' : 'Add Vendor'}</Button>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button type="button" variant="secondary" onClick={onClose} className="flex-1 sm:flex-none cursor-pointer">Cancel</Button>
+            <Button type="submit" disabled={saving} className="flex-1 sm:flex-none cursor-pointer">{saving ? 'Saving...' : vendor ? 'Save Changes' : 'Add Vendor'}</Button>
           </div>
         </div>
       </form>
@@ -241,13 +242,13 @@ function VendorMaterialsModal({ vendor, items, vendorItems, onClose, onChanged }
 
   return (
     <Modal open title={`Materials from ${vendor.name}`} onClose={onClose} size="lg">
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end">
+      <div className="mb-4 flex flex-col gap-2.5 sm:flex-row sm:items-end">
         <SelectField label="Add material" value={addItemId} onChange={(e) => setAddItemId(e.target.value)} className="flex-1">
           <option value="">Select item...</option>
           {items.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>)}
         </SelectField>
         <TextField label="Last rate" type="number" step="0.01" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="0.00" className="sm:w-32" />
-        <Button onClick={add} disabled={saving || !addItemId} variant="secondary"><Plus size={16} /> Add</Button>
+        <Button onClick={add} disabled={saving || !addItemId} variant="secondary" className="w-full sm:w-auto cursor-pointer"><Plus size={16} /> Add</Button>
       </div>
 
       {vendorItems.length === 0 ? (

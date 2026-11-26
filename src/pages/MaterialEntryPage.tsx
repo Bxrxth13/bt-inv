@@ -140,17 +140,17 @@ export function MaterialEntryPage() {
                 <option value="">Select vendor...</option>
                 {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
               </SelectField>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <TextField label="Quantity *" type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} required />
                 <TextField label="Rate / unit" type="number" step="0.01" min={0} value={rate} onChange={(e) => setRate(e.target.value)} placeholder="0.00" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <TextField label="Bill Number" value={billNumber} onChange={(e) => setBillNumber(e.target.value)} placeholder="Inv #" />
                 <TextField label="Date" type="date" value={movementDate} onChange={(e) => setMovementDate(e.target.value)} />
               </div>
               <TextAreaField label="Notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
               {error && <p className="text-sm text-red-400">{error}</p>}
-              <Button type="submit" disabled={saving} className="w-full"><Plus size={16} /> {saving ? 'Recording...' : 'Record Receipt'}</Button>
+              <Button type="submit" disabled={saving} className="w-full cursor-pointer"><Plus size={16} /> {saving ? 'Recording...' : 'Record Receipt'}</Button>
             </form>
           </div>
         </div>
@@ -169,7 +169,7 @@ export function MaterialEntryPage() {
               <button
                 type="button"
                 onClick={() => setSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-200"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-200 cursor-pointer"
                 title="Clear search"
               >
                 <X size={14} />
@@ -181,8 +181,8 @@ export function MaterialEntryPage() {
           ) : filtered.length === 0 ? (
             <EmptyState icon={<ArrowDownToLine size={36} />} title="No receipts recorded" subtitle="Use the form to record material received from vendors" />
           ) : (
-            <div className="overflow-hidden rounded-xl border border-zinc-800">
-              <table className="w-full text-left text-sm">
+            <div className="overflow-x-auto rounded-xl border border-zinc-800">
+              <table className="w-full min-w-[580px] text-left text-sm">
                 <thead className="bg-zinc-900/60 text-xs uppercase tracking-wider text-zinc-500">
                   <tr>
                     <th className="px-4 py-3 font-medium">Date</th>

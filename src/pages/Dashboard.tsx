@@ -59,7 +59,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (k: PageKey) => void }) 
     <div>
       <PageHeader title="Dashboard" subtitle="Overview of your factory inventory at a glance" />
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4">
         <StatCard icon={<Boxes size={18} />} label="Total Items" value={totalItems} hint={`${totalStockUnits} units in stock`} accent="emerald" onClick={() => onNavigate('live-stock')} />
         <StatCard icon={<AlertTriangle size={18} />} label="Low Stock" value={lowStock.length} hint={lowStock.length ? 'Needs attention' : 'All healthy'} accent="amber" onClick={() => onNavigate('live-stock')} />
         <StatCard icon={<Wallet size={18} />} label="Payments Due" value={payments.length} hint={`₹${totalDue.toLocaleString('en-IN')}`} accent="blue" onClick={() => onNavigate('payments')} />
@@ -161,18 +161,18 @@ function StatCard({ icon, label, value, hint, accent, onClick }: { icon: React.R
     blue: 'text-blue-400 bg-blue-500/10',
   };
   return (
-    <button onClick={onClick} className="group rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-900">
-      <div className={`mb-3 inline-flex rounded-lg p-2 ${accents[accent]}`}>{icon}</div>
-      <div className="text-2xl font-semibold text-zinc-100">{value}</div>
-      <div className="text-sm text-zinc-400">{label}</div>
-      <div className="mt-1 text-xs text-zinc-500">{hint}</div>
+    <button onClick={onClick} className="group rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 sm:p-4 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-900 cursor-pointer">
+      <div className={`mb-2 sm:mb-3 inline-flex rounded-lg p-1.5 sm:p-2 ${accents[accent]}`}>{icon}</div>
+      <div className="text-xl sm:text-2xl font-semibold text-zinc-100">{value}</div>
+      <div className="text-xs sm:text-sm text-zinc-400 truncate">{label}</div>
+      <div className="mt-0.5 sm:mt-1 text-[11px] sm:text-xs text-zinc-500 truncate">{hint}</div>
     </button>
   );
 }
 
 function Panel({ title, icon, action, children }: { title: string; icon: React.ReactNode; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3.5 sm:p-5">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
           <span className="text-zinc-500">{icon}</span>
@@ -187,10 +187,10 @@ function Panel({ title, icon, action, children }: { title: string; icon: React.R
 
 function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2">
+    <div className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-2.5 sm:px-3 py-2">
       {icon}
       <div>
-        <div className="text-lg font-semibold text-zinc-100">{value}</div>
+        <div className="text-base sm:text-lg font-semibold text-zinc-100">{value}</div>
         <div className="text-xs text-zinc-500">{label}</div>
       </div>
     </div>
@@ -201,7 +201,7 @@ function QuickAction({ icon, label, onClick }: { icon: React.ReactNode; label: s
   return (
     <button
       onClick={onClick}
-      className="flex flex-col items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-4 text-sm text-zinc-300 transition-colors hover:border-emerald-600/40 hover:bg-emerald-600/5 hover:text-emerald-400"
+      className="flex flex-col items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-2 sm:px-3 py-3 sm:py-4 text-xs sm:text-sm text-zinc-300 transition-colors hover:border-emerald-600/40 hover:bg-emerald-600/5 hover:text-emerald-400 cursor-pointer"
     >
       {icon}
       {label}

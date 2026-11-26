@@ -57,7 +57,7 @@ export function LiveStockPage() {
     <div>
       <PageHeader title="Live Stock" subtitle={`${lowCount} low-stock item${lowCount !== 1 ? 's' : ''} shown first`} />
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="mb-4 flex flex-col gap-2.5 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
           <input
@@ -70,23 +70,29 @@ export function LiveStockPage() {
             <button
               type="button"
               onClick={() => setSearch('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-200"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-200 cursor-pointer"
               title="Clear search"
             >
               <X size={14} />
             </button>
           )}
         </div>
-        <select value={catFilter} onChange={(e) => setCatFilter(e.target.value)} className="rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none">
-          <option value="all">All categories</option>
-          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <button
-          onClick={() => setShowLowOnly((v) => !v)}
-          className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${showLowOnly ? 'bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30' : 'border border-zinc-700 bg-zinc-800/60 text-zinc-300 hover:bg-zinc-800'}`}
-        >
-          <AlertTriangle size={15} /> Low stock only
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            value={catFilter}
+            onChange={(e) => setCatFilter(e.target.value)}
+            className="flex-1 sm:flex-none rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none"
+          >
+            <option value="all">All categories</option>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <button
+            onClick={() => setShowLowOnly((v) => !v)}
+            className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${showLowOnly ? 'bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30' : 'border border-zinc-700 bg-zinc-800/60 text-zinc-300 hover:bg-zinc-800'}`}
+          >
+            <AlertTriangle size={15} /> <span className="whitespace-nowrap">Low stock only</span>
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -94,8 +100,8 @@ export function LiveStockPage() {
       ) : filtered.length === 0 ? (
         <EmptyState icon={<Boxes size={36} />} title="No stock data" subtitle="Add items and record material entries to see live stock" />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-zinc-800">
-          <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto rounded-xl border border-zinc-800">
+          <table className="w-full min-w-[620px] text-left text-sm">
             <thead className="bg-zinc-900/60 text-xs uppercase tracking-wider text-zinc-500">
               <tr>
                 <th className="px-4 py-3 font-medium">Status</th>
